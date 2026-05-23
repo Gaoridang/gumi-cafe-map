@@ -26,50 +26,7 @@ body {
   min-height: 100svh;
 }
 
-/* Simple, accessible map container — clean light background to match v8 page and cards */
-.leaflet-container {
-  background: #f8f8f9;
-  z-index: 1;
-}
-
-/* Calm, token-faithful map markers for v8 Desktop Split-Left (per design-reviewer Slice 1 review).
-   36px hit area, strong-but-peaceful selected ring using accent, high contrast. */
-.cafe-marker {
-  transition: transform 120ms cubic-bezier(0.2, 0, 0, 1),
-              box-shadow 120ms cubic-bezier(0.2, 0, 0, 1);
-  cursor: pointer;
-}
-.cafe-marker:hover:not(.selected) {
-  transform: scale(1.08);
-  box-shadow: 0 3px 8px rgb(0 0 0 / 0.15);
-}
-.cafe-marker.selected {
-  transform: scale(1.32);
-  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.28), 0 4px 10px rgb(0 0 0 / 0.18);
-}
-
-/* Calm attribution on light neutral bg (small, readable, non-intrusive) */
-.leaflet-control-attribution {
-  font-size: 9px;
-  color: #71717a; /* neutral-500 */
-  background: rgba(255, 255, 255, 0.85);
-  padding: 1px 4px;
-  border-radius: 4px;
-}
-
-/* Calm card and form styles (v8 neutral palette, high contrast, 8pt-aligned) */
+/* Calm card styles (v8 neutral palette, high contrast, 8pt-aligned) — used by results list buttons */
 .cafe-card {
   @apply bg-white rounded-xl shadow-sm border border-neutral-200 transition-all hover:shadow-md;
-}
-
-.review-form input, .review-form textarea {
-  @apply border border-neutral-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent;
-}
-
-/* Star rating — high-contrast empty state (neutral-500), purple accent for filled/hover per v8 */
-.star {
-  @apply text-neutral-500 cursor-pointer transition-colors hover:text-accent;
-}
-.star.filled {
-  @apply text-accent;
 }

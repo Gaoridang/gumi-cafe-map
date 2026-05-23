@@ -13,7 +13,12 @@ export interface Cafe {
 }
 
 export interface Review {
-  rating: 1 | 2 | 3 | 4 | 5;
+  /** Multi-dimensional ratings (all optional) */
+  ratings?: {
+    coffee?: 1 | 2 | 3 | 4 | 5;
+    dessert?: 1 | 2 | 3 | 4 | 5;
+    mood?: 1 | 2 | 3 | 4 | 5; // 분위기 / atmosphere
+  };
   note?: string;
   tags: string[]; // from fixed vocabulary
   updatedAt: string; // ISO-8601
