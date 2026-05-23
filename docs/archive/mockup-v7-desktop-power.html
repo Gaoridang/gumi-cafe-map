@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gumi Cafe Map — v7 Desktop Power Layout</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Playfair+Display:wght@600&amp;display=swap');
+    
+    :root {
+      /* ElevenLabs-inspired DAY / LIGHT premium theme (clean, elegant, no warm tones) — approved visual language for v7 */
+      --bg: #f8f8f9;
+      --card: #ffffff;
+      --text: #111113;
+      --muted: #71717a;
+      --accent: #7c3aed;           /* ElevenLabs signature purple */
+      --accent-light: #a78bfa;
+      --border: #e4e4e7;
+      --highlight: #f4f4f5;
+      --chip-bg: #f1f0f5;
+    }
+    
+    html, body { height: 100%; }
+    body { font-family: 'Inter', system_ui, sans-serif; }
+    .heading { font-family: 'Playfair Display', Georgia, serif; }
+    
+    /* Generous spacing & premium calm aesthetic */
+    .cafe-result-row { 
+      transition: all 160ms cubic-bezier(0.2, 0, 0, 1); 
+      padding: 12px 14px;
+    }
+    .cafe-result-row:hover { 
+      background-color: #fafafa; 
+      transform: translateX(1px);
+    }
+    .cafe-result-row.selected { 
+      border-color: #7c3aed; 
+      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12); 
+      background-color: #fafafa; 
+    }
+    
+    .map-container { border-radius: 0; overflow: hidden; }
+    
+    .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.2); }
+    
+    .star { 
+      cursor: pointer; 
+      transition: transform 120ms ease, color 120ms ease; 
+      user-select: none;
+    }
+    .star:hover { transform: scale(1.18); }
+    .star.filled { color: #7c3aed; }
+    
+    .tag-chip { 
+      transition: all 150ms cubic-bezier(0.2, 0, 0, 1); 
+      font-size: 12px;
+      padding: 6px 14px;
+      height: 36px;
+      display: inline-flex;
+      align-items: center;
+    }
+    .tag-chip.active { 
+      background-color: #7c3aed; 
+      color: white; 
+      border-color: #7c3aed; 
+      box-shadow: 0 1px 3px rgba(124, 58, 237, 0.3);
+    }
+    .tag-chip:not(.active) {
+      background-color: var(--chip-bg);
+      border-color: #e4e4e7;
+      color: #3f3f46;
+    }
+    .tag-chip:not(.active):hover {
+      background-color: #e4e0f0;
+      border-color: #d1d0d7;
+    }
+    
+    .section-title { 
+      font-size: 11px; 
+      letter-spacing: 0.6px; 
+      font-weight: 600; 
+      color: #71717a; 
+      text-transform: uppercase;
+    }
+    
+    .cafe-marker {
+      width: 34px; height: 34px; border-radius: 9999px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: white;
+      box-shadow: 0 3px 8px rgb(0 0 0 / 0.25), 0 0 0 3px rgba(255,255,255,0.9);
+      border: 2px solid white;
+      transition: transform 200ms cubic-bezier(0.2, 0, 0, 1), box-shadow 200ms ease;
+    }
+    .cafe-marker.selected {
+      transform: scale(1.18);
+      box-shadow: 0 4px 14px rgb(0 0 0 / 0.3), 0 0 0 4px rgba(124, 58, 237, 0.4);
+    }
+    
+    .premium-shadow {
+      box-shadow: 0 10px 30px -12px rgb(0 0 0 / 0.12), 0 4px 8px -2px rgb(0 0 0 / 0.06);
+    }
+    
+    .power-header {
+      background: #fff;
+      border-bottom: 1px solid #e4e4e7;
+    }
+    
+    #map {
+      background: #f0f0f2;
+    }
+    
+    .leaflet-control-zoom {
+      border-radius: 10px !important;
+      overflow: hidden;
+      box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.1) !important;
+    }
+    
+    /* Right panel elegant inspector */
+    .detail-header {
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid #f4f4f5;
+    }
+    
+    .review-form-section {
+      padding: 20px 24px;
+    }
+    
+    .form-label {
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+      color: #71717a;
+      margin-bottom: 8px;
+      display: block;
+    }
+    
+    .success-flash {
+      animation: successPop 420ms ease forwards;
+    }
+    
+    @keyframes successPop {
+      0% { transform: scale(0.96); opacity: 0.6; }
+      60% { transform: scale(1.02); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    
+    /* Desktop power layout base */
+    .desktop-grid {
+      display: flex;
+      height: calc(100vh - 56px - 56px); /* header + topbar */
+    }
+    
+    /* Compact / responsive degrade */
+    .compact-mode #left-sidebar,
+    .compact-mode #right-panel {
+      display: none !important;
+    }
+    
+    .drawer {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      z-index: 9990;
+      transition: transform 320ms cubic-bezier(0.32, 0.72, 0, 1);
+      box-shadow: 20px 0 50px -12px rgb(0 0 0 / 0.25);
+    }
+    .drawer.left { left: 0; transform: translateX(-100%); }
+    .drawer.left.open { transform: translateX(0); }
+    
+    .bottom-sheet {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 9995;
+      border-radius: 20px 20px 0 0;
+      box-shadow: 0 -20px 60px -15px rgb(0 0 0 / 0.25);
+      transform: translateY(100%);
+      transition: transform 380ms cubic-bezier(0.32, 0.72, 0, 1);
+      max-height: 78vh;
+      overflow: hidden;
+    }
+    .bottom-sheet.open {
+      transform: translateY(0);
+    }
+    .sheet-handle {
+      width: 42px;
+      height: 5px;
+      background: #e4e4e7;
+      border-radius: 999px;
+      margin: 10px auto;
+    }
+    
+    .result-count {
+      font-variant-numeric: tabular-nums;
+    }
+    
+    .power-stat {
+      font-size: 12px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body class="bg-[#f8f8f9] text-[#111113] overflow-hidden">
+  <!-- Top approval bar — ElevenLabs light premium style -->
+  <div class="bg-white border-b border-[#e4e4e7] text-[#111113] py-2 px-4 text-sm font-medium flex items-center justify-between z-50 relative">
+    <div class="flex items-center gap-x-3">
+      <span class="font-semibold tracking-tight">Design Mockup <span class="text-[#7c3aed]">v7</span></span>
+      <span class="text-[#d4d1c7]">•</span>
+      <span class="text-xs opacity-90">Desktop Power Layout • Left Filters + Large Map + Right Inspector</span>
+      <span class="hidden xl:inline text-[10px] px-2.5 py-px rounded-full bg-[#f1f0f5] text-[#7c3aed] font-medium">Generous spacing • Fluid contextual review</span>
+    </div>
+    <div class="flex items-center gap-x-2 text-xs">
+      <button onclick="showFeedbackPrompt()" 
+              class="px-5 py-1.5 rounded-2xl bg-[#7c3aed] hover:bg-[#6d28d9] active:bg-[#5b21b6] transition font-semibold text-white text-sm shadow-sm">
+        👍 Approve v7
+      </button>
+      <button onclick="showFeedbackPrompt()" 
+              class="px-4 py-1.5 rounded-2xl border border-[#e4e4e7] hover:bg-[#f4f4f5] transition text-sm">
+        Suggest changes
+      </button>
+    </div>
+  </div>
+
+  <!-- Thin elegant header (minimal chrome, generous breathing) -->
+  <div class="power-header h-14 flex items-center px-5 z-[900] relative">
+    <div class="flex items-center gap-x-3 flex-1 min-w-0">
+      <div class="w-9 h-9 bg-[#7c3aed] rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-inner flex-shrink-0">☕</div>
+      <div class="min-w-0">
+        <span class="font-semibold tracking-tighter text-[22px] leading-none">Gumi Cafe Map</span>
+        <span class="ml-2.5 text-[10px] px-3 py-px rounded-full bg-[#f1f0f5] text-[#7c3aed] font-semibold align-middle tracking-[0.5px]">v7 POWER</span>
+      </div>
+      <div class="hidden md:block text-xs text-[#52525b] pl-2">Your private memory atlas • Desktop-first</div>
+    </div>
+
+    <div class="flex items-center gap-x-2.5 text-sm">
+      <!-- Stats -->
+      <div class="hidden lg:flex items-center gap-x-2 text-xs pr-2 border-r border-[#e4e4e7]">
+        <div><span class="font-semibold text-[#7c3aed]">8</span> <span class="text-[#52525b]">reviewed</span></div>
+        <div class="w-px h-3 bg-[#e4e4e7]"></div>
+        <div><span class="font-semibold">12</span> <span class="text-[#52525b]">cafés</span></div>
+      </div>
+
+      <!-- Header actions -->
+      <button onclick="exportReviews()" 
+              class="hidden sm:flex items-center gap-x-1.5 px-3.5 py-1.5 rounded-2xl bg-white border border-[#e4e4e7] hover:border-[#7c3aed]/60 text-xs font-medium transition shadow-sm text-[#111113]">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.25" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        <span>Export</span>
+      </button>
+
+      <!-- Desktop only: collapse left -->
+      <button onclick="toggleLeftSidebar()" id="desktop-collapse-btn"
+              class="hidden lg:flex items-center gap-x-1.5 px-3.5 py-1.5 rounded-2xl border border-[#e4e4e7] hover:bg-[#f4f4f5] active:bg-[#f1f0f5] text-xs font-semibold transition">
+        <span id="collapse-text">Collapse filters</span>
+      </button>
+
+      <!-- Compact mode controls (shown via JS) -->
+      <button onclick="openLeftDrawer()" id="mobile-filters-btn"
+              class="lg:hidden flex items-center gap-x-1.5 px-3.5 py-1.5 rounded-2xl border border-[#e4e4e7] hover:bg-[#f4f4f5] text-xs font-semibold transition">
+        ☰ <span class="hidden sm:inline">Filters</span>
+      </button>
+      
+      <button onclick="deselectCafe()" id="mobile-deselect-btn"
+              class="lg:hidden hidden items-center px-3 py-1.5 rounded-2xl bg-[#f1f0f5] text-[#7c3aed] text-xs font-semibold transition">
+        Clear selection
+      </button>
+    </div>
+  </div>
+
+  <!-- Desktop Power 3-Column Layout -->
+  <div id="main-layout" class="desktop-grid">
+    
+    <!-- LEFT: Filters + Quick Results (powerful dense sidebar) -->
+    <aside id="left-sidebar" 
+           class="w-[280px] xl:w-[300px] bg-white border-r border-[#e4e4e7] flex flex-col flex-shrink-0 z-40">
+      
+      <!-- Sidebar header -->
+      <div class="px-5 py-4 border-b border-[#e4e4e7] bg-[#f8f8f9] flex items-center justify-between flex-shrink-0">
+        <div>
+          <div class="font-semibold text-[15px] tracking-tight">Filters &amp; Results</div>
+          <div class="text-[10px] text-[#71717a]">Live updates • Instant</div>
+        </div>
+        <button onclick="resetFilters()" 
+                class="text-[10px] px-3 py-1 rounded-xl border border-[#e4e4e7] hover:bg-white text-[#71717a] hover:text-[#111113] transition font-medium">
+          Reset
+        </button>
+      </div>
+      
+      <!-- Scrollable generous filter + results area -->
+      <div class="flex-1 overflow-y-auto p-5 space-y-6 text-sm">
+        
+        <!-- Search — prominent, generous -->
+        <div>
+          <div class="section-title mb-2">Search cafés</div>
+          <div class="relative">
+            <input id="search-input" type="text" placeholder="Name, address, or memory..." 
+                   oninput="applyFilters()" 
+                   class="w-full bg-white border border-[#e4e4e7] focus:border-[#7c3aed] rounded-2xl pl-10 py-3 text-[14px] placeholder:text-[#71717a] outline-none text-[#111113]">
+            <svg class="w-4 h-4 absolute left-4 top-4 text-[#71717a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Rating filter — generous chips -->
+        <div>
+          <div class="section-title mb-2">Minimum rating</div>
+          <div class="flex flex-wrap gap-1.5" id="rating-filters">
+            <!-- JS populated -->
+          </div>
+        </div>
+
+        <!-- Tags filter — generous wrap -->
+        <div>
+          <div class="section-title mb-2 flex items-center justify-between">
+            <span>Tags</span>
+            <span id="active-tag-count" class="text-[10px] font-mono px-1.5 py-px rounded bg-[#f1f0f5] text-[#7c3aed]">0</span>
+          </div>
+          <div id="tag-filters" class="flex flex-wrap gap-1.5">
+            <!-- JS populated generous chips -->
+          </div>
+        </div>
+
+        <!-- Quick results list header -->
+        <div class="pt-1 border-t border-[#f4f4f5]">
+          <div class="flex items-center justify-between mb-2">
+            <div class="section-title">Quick results <span id="results-count" class="result-count font-mono text-[#7c3aed] text-[12px]"></span></div>
+          </div>
+          
+          <!-- Dense, scannable result rows — generous tap targets -->
+          <div id="results-list" class="space-y-1 max-h-[380px] overflow-y-auto pr-1 -mr-1 text-[13.5px]">
+            <!-- Populated dynamically by renderResultsList() -->
+          </div>
+        </div>
+      </div>
+      
+      <div class="px-5 py-3 text-[10px] text-center text-[#71717a] border-t bg-[#f8f8f9] flex-shrink-0">
+        Tap any row or map marker to load full details + review form
+      </div>
+    </aside>
+
+    <!-- CENTER: Large beautiful map (the hero) -->
+    <div id="map-wrapper" class="flex-1 relative bg-[#f0f0f2] min-w-[320px]">
+      <div id="map" class="absolute inset-0 map-container z-10"></div>
+      
+      <!-- Subtle map legend / hint (desktop elegant) -->
+      <div class="absolute bottom-4 left-4 z-[600] hidden xl:flex items-center gap-x-2 text-[10px] px-3 py-1.5 bg-white/95 border border-[#e4e4e7] rounded-2xl text-[#52525b] shadow-sm">
+        <div class="flex items-center gap-x-1">
+          <div class="w-2.5 h-2.5 rounded-full bg-[#7c3aed]"></div>
+          <span>4.5+</span>
+        </div>
+        <div class="w-px h-3 bg-[#e4e4e7]"></div>
+        <span>Pan • Zoom • Click markers</span>
+      </div>
+      
+      <!-- Selection hint when nothing chosen -->
+      <div id="map-hint" class="absolute top-4 right-4 z-[600] hidden xl:block px-3.5 py-2 bg-white/95 border border-[#e4e4e7] rounded-2xl text-xs text-[#52525b] shadow-sm">
+        Select a café to open inspector →
+      </div>
+    </div>
+
+    <!-- RIGHT: Detail Panel + Full Inline Review Form (the power feature) -->
+    <aside id="right-panel" 
+           class="w-[370px] xl:w-[400px] bg-white border-l border-[#e4e4e7] flex flex-col flex-shrink-0 z-40 overflow-hidden">
+      
+      <div id="right-content" class="flex-1 flex flex-col overflow-y-auto">
+        <!-- JS injects either empty state or full inspector content here -->
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- ========== DRAWERS & SHEETS FOR COMPACT / MOBILE DEGRADE ========== -->
+  
+  <!-- Left Filters Drawer (for compact mode) -->
+  <div id="left-drawer" class="drawer left bg-white border-r border-[#e4e4e7] w-[280px] hidden lg:hidden">
+    <div class="px-5 py-4 border-b flex items-center justify-between bg-[#f8f8f9]">
+      <div class="font-semibold">Filters &amp; Results</div>
+      <button onclick="closeLeftDrawer()" class="text-2xl leading-none text-[#52525b]">×</button>
+    </div>
+    <!-- Mini version of filters (same ids reused via JS or duplicate for simplicity - we clone logic) -->
+    <div class="p-5 space-y-5 text-sm overflow-auto h-[calc(100%-56px)]" id="drawer-filters-content">
+      <!-- Populated on open to avoid duplication -->
+    </div>
+  </div>
+
+  <!-- Right Detail Bottom Sheet (for compact mode) -->
+  <div id="right-sheet" class="bottom-sheet bg-white border-t border-[#e4e4e7] hidden lg:hidden">
+    <div class="sheet-handle"></div>
+    <div class="px-5 pt-1 pb-4 flex items-center justify-between border-b">
+      <div class="font-semibold text-lg" id="sheet-cafe-name"></div>
+      <button onclick="closeRightSheet()" class="text-3xl leading-none text-[#52525b] px-1 -mr-1">×</button>
+    </div>
+    <div id="sheet-content" class="overflow-y-auto p-5 text-sm" style="max-height: calc(78vh - 80px);">
+      <!-- Populated with details + review form for mobile -->
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[10000]"></div>
+
+  <script>
+    // ========== DATA ==========
+    let cafes = [
+      { id: "c1", name: "Bean Story", address: "Gumi-si, near the river", lat: 36.1195, lng: 128.3447, tags: ["WiFi", "Quiet", "Power"], avgRating: 4.6 },
+      { id: "c2", name: "라떼하우스", address: "Indong-dong, Gumi", lat: 36.1123, lng: 128.3512, tags: ["Dessert", "Cozy", "WiFi"], avgRating: 4.2 },
+      { id: "c3", name: "구미 커피 로스터스", address: "Industrial complex area", lat: 36.1251, lng: 128.3389, tags: ["Power", "Work-friendly", "Great Coffee"], avgRating: 4.8 },
+      { id: "c4", name: "Quiet Corner Cafe", address: "Near Gumi Station", lat: 36.1089, lng: 128.3621, tags: ["Quiet", "View", "Cozy"], avgRating: 3.9 },
+      { id: "c5", name: "오트밀 & 라떼", address: "Seonsan-myeon", lat: 36.1344, lng: 128.3298, tags: ["Dessert", "WiFi", "Great Coffee"], avgRating: 4.5 },
+      { id: "c6", name: "The Daily Bean", address: "Gumi City Hall area", lat: 36.1158, lng: 128.3476, tags: ["Power", "Work-friendly", "Quiet"], avgRating: 4.1 },
+      { id: "c7", name: "카페 포레스트", address: "Near the park", lat: 36.1228, lng: 128.3554, tags: ["View", "Cozy", "Dessert"], avgRating: 4.7 },
+      { id: "c8", name: "Morning Roastery", address: "Wonpyeong-dong", lat: 36.1052, lng: 128.3411, tags: ["Great Coffee", "Power", "WiFi"], avgRating: 4.3 },
+      { id: "c9", name: "Hidden Table", address: "Residential street", lat: 36.1301, lng: 128.3629, tags: ["Quiet", "Cozy"], avgRating: 4.0 },
+      { id: "c10", name: "Gumi Sky Cafe", address: "High floor with view", lat: 36.1180, lng: 128.3490, tags: ["View", "Dessert", "Cozy"], avgRating: 4.9 },
+      { id: "c11", name: "Slow Roam", address: "Old town alley", lat: 36.1209, lng: 128.3581, tags: ["Quiet", "Cozy"], avgRating: 4.4 },
+      { id: "c12", name: "에스프레소 스튜디오", address: "Near the library", lat: 36.1142, lng: 128.3433, tags: ["Great Coffee", "Power", "Work-friendly"], avgRating: 4.6 }
+    ];
+
+    // Persisted user reviews (session only)
+    let userReviews = {
+      "c1": { rating: 5, note: "Best quiet spot for deep work. Excellent flat white and reliable power outlets.", tags: ["Quiet", "Power", "WiFi"] },
+      "c3": { rating: 5, note: "Amazing single origin pour-over. Will return for the atmosphere.", tags: ["Great Coffee", "Power"] },
+      "c7": { rating: 4, note: "Beautiful view of the mountains. Great for dates or reading.", tags: ["View", "Cozy"] },
+      "c10": { rating: 5, note: "Stunning 180° city view. Perfect golden hour spot.", tags: ["View", "Dessert"] }
+    };
+
+    let map;
+    let markers = {};
+    let selectedCafeId = null;
+    let currentFilters = { search: "", minRating: 0, tags: [] };
+    let isLeftCollapsed = false;
+    let currentStarRating = 0;
+    let currentReviewTags = [];
+    let isCompactMode = false;
+
+    const ALL_TAGS = ["WiFi", "Quiet", "Power", "Dessert", "View", "Work-friendly", "Great Coffee", "Cozy"];
+
+    function initTailwind() {
+      // Tailwind script already loaded via CDN — no extra config needed for mock
+    }
+
+    function checkLayoutMode() {
+      const w = window.innerWidth;
+      const wasCompact = isCompactMode;
+      isCompactMode = w < 1024;
+      
+      const body = document.body;
+      const left = document.getElementById('left-sidebar');
+      const right = document.getElementById('right-panel');
+      const mobileBtn = document.getElementById('mobile-filters-btn');
+      const desktopCollapse = document.getElementById('desktop-collapse-btn');
+      
+      if (isCompactMode) {
+        body.classList.add('compact-mode');
+        if (left) left.style.display = 'none';
+        if (right) right.style.display = 'none';
+        if (mobileBtn) mobileBtn.style.display = 'flex';
+        if (desktopCollapse) desktopCollapse.style.display = 'none';
+        
+        // If we have an active selection in compact, ensure sheet is available (but don't auto open)
+      } else {
+        body.classList.remove('compact-mode');
+        if (left) left.style.display = '';
+        if (right) right.style.display = '';
+        if (mobileBtn) mobileBtn.style.display = 'none';
+        if (desktopCollapse) desktopCollapse.style.display = 'flex';
+        
+        // Close any open drawers/sheets when returning to desktop
+        closeLeftDrawer();
+        closeRightSheet();
+        
+        // If we had a selection, make sure right panel shows it
+        if (selectedCafeId) {
+          populateRightPanel(selectedCafeId);
+        }
+      }
+    }
+
+    function initMap() {
+      map = L.map('map', { 
+        zoomControl: true,
+        attributionControl: false 
+      }).setView([36.1195, 128.3447], 13.6);
+      
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
+        className: 'map-tiles'
+      }).addTo(map);
+
+      // Add all markers
+      cafes.forEach(cafe => {
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+        const color = getRatingColor(rating);
+        
+        const icon = L.divIcon({
+          className: '',
+          html: `<div class="cafe-marker" style="background:${color}; font-size:11px;" data-id="${cafe.id}">${rating.toFixed(1)}</div>`,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+          popupAnchor: [0, -18]
+        });
+
+        const marker = L.marker([cafe.lat, cafe.lng], { icon }).addTo(map);
+        
+        marker.on('click', () => {
+          selectCafe(cafe.id);
+        });
+        
+        markers[cafe.id] = marker;
+      });
+
+      // Beautiful initial bounds
+      map.fitBounds(cafes.map(c => [c.lat, c.lng]), { padding: [60, 60], maxZoom: 15.2 });
+    }
+
+    function getRatingColor(rating) {
+      if (rating >= 4.5) return '#7c3aed';
+      if (rating >= 4.0) return '#a78bfa';
+      if (rating >= 3.5) return '#6366f1';
+      return '#4b5563';
+    }
+
+    function updateMarkerIcon(cafeId) {
+      if (!markers[cafeId]) return;
+      const review = userReviews[cafeId];
+      const cafe = cafes.find(c => c.id === cafeId);
+      const rating = review ? review.rating : (cafe ? cafe.avgRating : 4);
+      const color = getRatingColor(rating);
+      const isSelected = selectedCafeId === cafeId;
+      
+      const html = `<div class="cafe-marker ${isSelected ? 'selected' : ''}" style="background:${color}; font-size:11px;" data-id="${cafeId}">${rating.toFixed(1)}</div>`;
+      
+      const newIcon = L.divIcon({
+        className: '',
+        html: html,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
+        popupAnchor: [0, -18]
+      });
+      markers[cafeId].setIcon(newIcon);
+    }
+
+    function renderRatingFilters() {
+      const container = document.getElementById('rating-filters');
+      if (!container) return;
+      container.innerHTML = '';
+      
+      const options = [
+        { label: 'Any', value: 0 },
+        { label: '3.5+', value: 3.5 },
+        { label: '4.0+', value: 4.0 },
+        { label: '4.5+', value: 4.5 }
+      ];
+      
+      options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.className = `px-3.5 py-1 text-xs rounded-2xl border transition font-medium ${currentFilters.minRating === opt.value ? 'bg-[#7c3aed] text-white border-[#7c3aed]' : 'border-[#e4e4e7] hover:bg-[#f1f0f5] text-[#3f3f46]'}`;
+        btn.textContent = opt.label;
+        btn.onclick = () => {
+          currentFilters.minRating = opt.value;
+          renderRatingFilters();
+          applyFilters();
+        };
+        container.appendChild(btn);
+      });
+    }
+
+    function renderTagFilters(containerId = 'tag-filters') {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      container.innerHTML = '';
+      
+      ALL_TAGS.forEach(tag => {
+        const isActive = currentFilters.tags.includes(tag);
+        const chip = document.createElement('button');
+        chip.className = `tag-chip px-3 py-1 text-xs border rounded-2xl whitespace-nowrap ${isActive ? 'active' : ''}`;
+        chip.textContent = tag;
+        
+        chip.onclick = () => {
+          if (currentFilters.tags.includes(tag)) {
+            currentFilters.tags = currentFilters.tags.filter(t => t !== tag);
+          } else {
+            currentFilters.tags.push(tag);
+          }
+          renderTagFilters(containerId);
+          const countEl = document.getElementById('active-tag-count');
+          if (countEl) countEl.textContent = currentFilters.tags.length;
+          applyFilters();
+        };
+        container.appendChild(chip);
+      });
+    }
+
+    function applyFilters() {
+      const searchVal = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
+      currentFilters.search = searchVal;
+
+      const filtered = cafes.filter(cafe => {
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+        
+        const matchesSearch = !searchVal || 
+          cafe.name.toLowerCase().includes(searchVal) || 
+          cafe.address.toLowerCase().includes(searchVal) ||
+          (review && review.note && review.note.toLowerCase().includes(searchVal));
+        
+        const matchesRating = rating >= currentFilters.minRating;
+        
+        const matchesTags = currentFilters.tags.length === 0 || 
+          currentFilters.tags.every(t => cafe.tags.includes(t) || (review && review.tags && review.tags.includes(t)));
+        
+        return matchesSearch && matchesRating && matchesTags;
+      });
+
+      // Update count
+      const countEl = document.getElementById('results-count');
+      if (countEl) countEl.textContent = filtered.length;
+
+      // Re-render quick results list
+      renderResultsList(filtered);
+
+      // Update visible markers (filter them)
+      updateVisibleMarkers(filtered);
+    }
+
+    function updateVisibleMarkers(filteredCafes) {
+      const filteredIds = new Set(filteredCafes.map(c => c.id));
+      
+      cafes.forEach(cafe => {
+        const marker = markers[cafe.id];
+        if (!marker) return;
+        
+        if (filteredIds.has(cafe.id)) {
+          if (!map.hasLayer(marker)) {
+            marker.addTo(map);
+          }
+          marker.setOpacity(1);
+        } else {
+          marker.setOpacity(0.25);
+          // keep on map but dimmed so selection still works
+        }
+      });
+    }
+
+    function renderResultsList(filteredCafes) {
+      const container = document.getElementById('results-list');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (filteredCafes.length === 0) {
+        container.innerHTML = `<div class="px-3 py-6 text-center text-xs text-[#71717a]">No cafés match your filters.</div>`;
+        return;
+      }
+
+      filteredCafes.forEach(cafe => {
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+        
+        const row = document.createElement('div');
+        row.className = `cafe-result-row cursor-pointer flex items-center justify-between gap-3 border rounded-2xl ${selectedCafeId === cafe.id ? 'selected border-[#7c3aed]' : 'border-[#e4e4e7] hover:border-[#7c3aed]/40'}`;
+        
+        const tagsPreview = (review && review.tags && review.tags.length > 0) 
+          ? review.tags.slice(0, 2).join(' · ') 
+          : cafe.tags.slice(0, 2).join(' · ');
+        
+        row.innerHTML = `
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold text-[14px] leading-tight tracking-[-0.1px]">${cafe.name}</div>
+            <div class="text-[11px] text-[#52525b] truncate mt-0.5">${cafe.address}</div>
+            <div class="text-[10px] text-[#71717a] mt-1 truncate">${tagsPreview}</div>
+          </div>
+          <div class="text-right flex-shrink-0">
+            <div class="font-semibold text-base tabular-nums" style="color: ${getRatingColor(rating)}">${rating.toFixed(1)}</div>
+            <div class="text-[10px] text-[#71717a] -mt-0.5">★</div>
+          </div>
+        `;
+        
+        row.onclick = () => {
+          selectCafe(cafe.id);
+          // On compact, close drawer after selection
+          if (isCompactMode) closeLeftDrawer();
+        };
+        
+        container.appendChild(row);
+      });
+    }
+
+    function selectCafe(cafeId) {
+      selectedCafeId = cafeId;
+      const cafe = cafes.find(c => c.id === cafeId);
+      if (!cafe) return;
+
+      // Update all markers (highlight selected)
+      Object.keys(markers).forEach(id => updateMarkerIcon(id));
+
+      // Fly map elegantly
+      if (map && markers[cafeId]) {
+        map.flyTo([cafe.lat, cafe.lng], 16.8, { duration: 0.7 });
+      }
+
+      // Update list highlights
+      applyFilters();
+
+      // Populate the right inspector (or open sheet in compact mode)
+      if (isCompactMode) {
+        openRightSheet(cafeId);
+        // show mobile deselect
+        const desel = document.getElementById('mobile-deselect-btn');
+        if (desel) desel.style.display = 'flex';
+      } else {
+        populateRightPanel(cafeId);
+      }
+
+      // Update map hint
+      const hint = document.getElementById('map-hint');
+      if (hint) hint.style.display = 'none';
+    }
+
+    function deselectCafe() {
+      selectedCafeId = null;
+      
+      // Reset markers
+      Object.keys(markers).forEach(id => updateMarkerIcon(id));
+      
+      // Re-apply filters to refresh list
+      applyFilters();
+      
+      if (!isCompactMode) {
+        populateRightPanel(null); // show empty state
+      } else {
+        closeRightSheet();
+        const desel = document.getElementById('mobile-deselect-btn');
+        if (desel) desel.style.display = 'none';
+      }
+      
+      const hint = document.getElementById('map-hint');
+      if (hint) hint.style.display = 'block';
+    }
+
+    function populateRightPanel(cafeId) {
+      const container = document.getElementById('right-content');
+      if (!container) return;
+
+      if (!cafeId) {
+        // Elegant empty state
+        container.innerHTML = `
+          <div class="flex flex-col items-center justify-center h-full px-8 text-center">
+            <div class="w-16 h-16 rounded-3xl bg-[#f1f0f5] flex items-center justify-center text-4xl mb-5">☕︎</div>
+            <div class="font-semibold text-lg tracking-tight mb-2">Inspector ready</div>
+            <div class="text-sm text-[#52525b] leading-relaxed max-w-[260px]">
+              Select any café from the results list or map markers. 
+              The full review form will appear here — contextual and fluid.
+            </div>
+            <div class="mt-6 text-[11px] text-[#71717a] flex items-center gap-x-1.5">
+              <div class="w-px h-3 bg-[#e4e4e7]"></div>
+              <span>Generous space for thoughtful notes</span>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      const cafe = cafes.find(c => c.id === cafeId);
+      const review = userReviews[cafeId];
+      const rating = review ? review.rating : cafe.avgRating;
+      const hasReview = !!review;
+
+      currentStarRating = hasReview ? review.rating : 0;
+      currentReviewTags = hasReview && review.tags ? [...review.tags] : [...cafe.tags];
+
+      container.innerHTML = `
+        <!-- Detail header -->
+        <div class="detail-header flex items-start justify-between bg-white sticky top-0 z-10">
+          <div class="min-w-0 pr-3">
+            <div class="heading text-[22px] font-semibold tracking-[-0.4px] leading-none">${cafe.name}</div>
+            <div class="text-sm text-[#52525b] mt-1.5">${cafe.address}</div>
+            <div class="flex items-center gap-x-2 mt-2.5">
+              <div class="flex items-center gap-x-px text-[#7c3aed]">
+                ${Array.from({length:5}).map((_,i) => `<span class="text-lg ${i < Math.round(rating) ? '★' : '☆'}"></span>`).join('')}
+              </div>
+              <div class="text-sm font-semibold tabular-nums" style="color:#7c3aed">${rating.toFixed(1)}</div>
+              <div class="text-xs px-2 py-px rounded bg-[#f1f0f5] text-[#52525b]">${hasReview ? 'Your review' : 'Community avg'}</div>
+            </div>
+          </div>
+          <button onclick="deselectCafe()" class="text-3xl leading-none text-[#52525b] hover:text-[#7c3aed] transition -mt-1 px-1">×</button>
+        </div>
+
+        <!-- Quick facts -->
+        <div class="px-6 py-4 border-b border-[#f4f4f5] flex flex-wrap gap-x-4 gap-y-1 text-xs">
+          <div><span class="text-[#71717a]">Tags:</span> <span class="font-medium">${cafe.tags.join(' · ')}</span></div>
+          ${hasReview ? `<div class="text-[#7c3aed] font-medium">You’ve logged a memory here</div>` : ''}
+        </div>
+
+        <!-- Full Review Form — fluid and contextual -->
+        <div class="review-form-section flex-1">
+          <div class="font-semibold text-base tracking-tight mb-4">Your review</div>
+          
+          <!-- Stars — generous targets -->
+          <div class="mb-6">
+            <div class="form-label">How was your visit?</div>
+            <div id="right-star-rating" class="flex gap-x-2 text-[42px] text-[#d4d4d8]">
+              <!-- populated by JS -->
+            </div>
+          </div>
+
+          <!-- Note -->
+          <div class="mb-6">
+            <div class="form-label">Memory note</div>
+            <textarea id="review-note" rows="4" placeholder="The oat latte was perfectly balanced and the window seat had the best light..." 
+                      class="w-full border border-[#e4e4e7] focus:border-[#7c3aed] rounded-2xl p-4 text-sm outline-none resize-y min-h-[110px]">${review && review.note ? review.note : ''}</textarea>
+          </div>
+
+          <!-- Tags editor -->
+          <div class="mb-7">
+            <div class="form-label mb-2">What stood out? (select any that apply)</div>
+            <div id="right-panel-tags" class="flex flex-wrap gap-2">
+              <!-- JS rendered toggle chips -->
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="space-y-2.5">
+            <button onclick="saveReviewFromRight()" 
+                    class="w-full py-3.5 rounded-2xl bg-[#7c3aed] hover:bg-[#6d28d9] active:bg-[#5b21b6] transition text-white font-semibold text-sm tracking-wide shadow-sm">
+              ${hasReview ? 'Update memory' : 'Save memory'}
+            </button>
+            
+            ${hasReview ? `
+              <button onclick="clearReviewFromRight()" 
+                      class="w-full py-2.5 rounded-2xl border border-[#e4e4e7] hover:bg-[#f8f8f9] text-xs font-medium text-[#52525b] transition">
+                Clear this review
+              </button>
+            ` : ''}
+            
+            <div onclick="centerMapOnCafe('${cafeId}')" 
+                 class="cursor-pointer text-center text-xs text-[#7c3aed] hover:underline pt-1">Center map on this café</div>
+          </div>
+        </div>
+
+        <div class="px-6 py-4 border-t text-[10px] text-[#71717a] bg-[#f8f8f9]">
+          Changes save instantly to your private log. Visible on map &amp; list.
+        </div>
+      `;
+
+      // After injecting HTML, wire up interactive stars + tags
+      setTimeout(() => {
+        renderRightStars(cafeId);
+        renderRightPanelTags(cafeId);
+      }, 10);
+    }
+
+    function renderRightStars(cafeId) {
+      const container = document.getElementById('right-star-rating');
+      if (!container) return;
+      container.innerHTML = '';
+
+      for (let i = 1; i <= 5; i++) {
+        const star = document.createElement('span');
+        star.className = `star ${i <= currentStarRating ? 'filled' : ''}`;
+        star.textContent = '★';
+        star.onclick = () => {
+          currentStarRating = i;
+          renderRightStars(cafeId);
+        };
+        star.onmouseenter = () => {
+          // live preview
+          const all = container.querySelectorAll('.star');
+          all.forEach((s, idx) => s.classList.toggle('filled', idx + 1 <= i));
+        };
+        star.onmouseleave = () => {
+          const all = container.querySelectorAll('.star');
+          all.forEach((s, idx) => s.classList.toggle('filled', idx + 1 <= currentStarRating));
+        };
+        container.appendChild(star);
+      }
+    }
+
+    function renderRightPanelTags(cafeId) {
+      const container = document.getElementById('right-panel-tags');
+      if (!container) return;
+      container.innerHTML = '';
+
+      ALL_TAGS.forEach(tag => {
+        const isSelected = currentReviewTags.includes(tag);
+        const chip = document.createElement('button');
+        chip.className = `tag-chip px-4 py-1.5 text-xs border rounded-2xl whitespace-nowrap ${isSelected ? 'active' : ''}`;
+        chip.textContent = tag;
+
+        chip.onclick = () => {
+          if (currentReviewTags.includes(tag)) {
+            currentReviewTags = currentReviewTags.filter(t => t !== tag);
+          } else {
+            currentReviewTags.push(tag);
+          }
+          renderRightPanelTags(cafeId);
+        };
+        container.appendChild(chip);
+      });
+    }
+
+    function saveReviewFromRight() {
+      if (!selectedCafeId) return;
+
+      const noteEl = document.getElementById('review-note');
+      const note = noteEl ? noteEl.value.trim() : '';
+
+      userReviews[selectedCafeId] = {
+        rating: currentStarRating || 4,
+        note: note || undefined,
+        tags: [...currentReviewTags]
+      };
+
+      // Update marker live
+      updateMarkerIcon(selectedCafeId);
+
+      // Refresh lists & right panel
+      applyFilters();
+      populateRightPanel(selectedCafeId);
+
+      // Beautiful inline success
+      showInlineSuccess('Memory saved ✓');
+      showToast(`Saved for ${cafes.find(c => c.id === selectedCafeId).name}`);
+    }
+
+    function clearReviewFromRight() {
+      if (!selectedCafeId) return;
+      if (!confirm('Clear your review for this café?')) return;
+
+      delete userReviews[selectedCafeId];
+      updateMarkerIcon(selectedCafeId);
+      applyFilters();
+      populateRightPanel(selectedCafeId);
+    }
+
+    function centerMapOnCafe(cafeId) {
+      const cafe = cafes.find(c => c.id === cafeId);
+      if (map && cafe) {
+        map.flyTo([cafe.lat, cafe.lng], 17.2, { duration: 0.6 });
+      }
+    }
+
+    function showInlineSuccess(msg) {
+      const container = document.getElementById('right-content');
+      if (!container) return;
+      
+      // Find or create a status bar at top of content
+      let status = container.querySelector('#inline-status');
+      if (!status) {
+        status = document.createElement('div');
+        status.id = 'inline-status';
+        status.className = 'px-6 py-2 text-xs font-medium text-[#7c3aed] bg-[#f1f0f5] flex items-center gap-x-2 border-b';
+        container.insertBefore(status, container.firstChild);
+      }
+      status.innerHTML = `<span class="success-flash">${msg}</span>`;
+      
+      setTimeout(() => {
+        if (status && status.parentNode) status.parentNode.removeChild(status);
+      }, 2400);
+    }
+
+    function saveReviewFromSheet() {
+      if (!selectedCafeId) return;
+
+      const noteEl = document.getElementById('sheet-review-note');
+      const note = noteEl ? noteEl.value.trim() : '';
+
+      // Collect active tags from sheet chips (simple class check)
+      const tagEls = document.querySelectorAll('#sheet-tags .tag-chip.active');
+      let tags = [];
+      tagEls.forEach(el => tags.push(el.textContent));
+
+      userReviews[selectedCafeId] = {
+        rating: currentStarRating || 4,
+        note: note || undefined,
+        tags: tags.length ? tags : currentReviewTags
+      };
+
+      updateMarkerIcon(selectedCafeId);
+      applyFilters();
+      closeRightSheet();
+      showToast(`Saved for ${cafes.find(c => c.id === selectedCafeId).name}`);
+    }
+
+    // ========== COMPACT MODE DRAWERS / SHEETS ==========
+
+    function openLeftDrawer() {
+      const drawer = document.getElementById('left-drawer');
+      const content = document.getElementById('drawer-filters-content');
+      if (!drawer || !content) return;
+      
+      // Populate a compact version of filters
+      content.innerHTML = `
+        <div class="space-y-5">
+          <div>
+            <div class="section-title mb-2">Search</div>
+            <input id="drawer-search" type="text" placeholder="Search..." value="${currentFilters.search}" 
+                   oninput="syncDrawerFilters()" class="w-full border border-[#e4e4e7] rounded-2xl px-4 py-3 text-sm">
+          </div>
+          <div>
+            <div class="section-title mb-2">Min rating</div>
+            <div id="drawer-rating" class="flex gap-1.5"></div>
+          </div>
+          <div>
+            <div class="section-title mb-2">Tags</div>
+            <div id="drawer-tags" class="flex flex-wrap gap-1.5"></div>
+          </div>
+          <button onclick="applyDrawerFilters(); closeLeftDrawer()" class="w-full mt-2 py-3 rounded-2xl bg-[#7c3aed] text-white font-semibold text-sm">Apply &amp; close</button>
+        </div>
+      `;
+      
+      drawer.classList.add('open');
+      drawer.style.display = 'block';
+      
+      // Populate drawer controls after render
+      setTimeout(() => {
+        renderDrawerRating();
+        renderDrawerTags();
+      }, 20);
+    }
+
+    function closeLeftDrawer() {
+      const drawer = document.getElementById('left-drawer');
+      if (drawer) {
+        drawer.classList.remove('open');
+        setTimeout(() => { if (drawer) drawer.style.display = 'none'; }, 300);
+      }
+    }
+
+    function syncDrawerFilters() {
+      const val = document.getElementById('drawer-search')?.value || '';
+      currentFilters.search = val.toLowerCase();
+      // live update main search too if exists
+      const mainSearch = document.getElementById('search-input');
+      if (mainSearch) mainSearch.value = val;
+      applyFilters();
+    }
+
+    function renderDrawerRating() {
+      const c = document.getElementById('drawer-rating');
+      if (!c) return;
+      c.innerHTML = '';
+      const opts = [0, 3.5, 4.0, 4.5];
+      opts.forEach(v => {
+        const b = document.createElement('button');
+        b.className = `px-3 py-1 text-xs rounded-2xl border ${currentFilters.minRating === v ? 'bg-[#7c3aed] text-white border-[#7c3aed]' : 'border-[#e4e4e7]'}`;
+        b.textContent = v === 0 ? 'Any' : v + '+';
+        b.onclick = () => {
+          currentFilters.minRating = v;
+          renderDrawerRating();
+          applyFilters();
+        };
+        c.appendChild(b);
+      });
+    }
+
+    function renderDrawerTags() {
+      const c = document.getElementById('drawer-tags');
+      if (!c) return;
+      c.innerHTML = '';
+      ALL_TAGS.forEach(tag => {
+        const active = currentFilters.tags.includes(tag);
+        const ch = document.createElement('button');
+        ch.className = `tag-chip text-xs ${active ? 'active' : ''}`;
+        ch.textContent = tag;
+        ch.onclick = () => {
+          if (currentFilters.tags.includes(tag)) currentFilters.tags = currentFilters.tags.filter(t=>t!==tag);
+          else currentFilters.tags.push(tag);
+          renderDrawerTags();
+          applyFilters();
+        };
+        c.appendChild(ch);
+      });
+    }
+
+    function applyDrawerFilters() {
+      applyFilters();
+    }
+
+    function openRightSheet(cafeId) {
+      selectedCafeId = cafeId;
+      const sheet = document.getElementById('right-sheet');
+      const nameEl = document.getElementById('sheet-cafe-name');
+      const content = document.getElementById('sheet-content');
+      if (!sheet || !content) return;
+
+      const cafe = cafes.find(c => c.id === cafeId);
+      const review = userReviews[cafeId];
+      const rating = review ? review.rating : cafe.avgRating;
+      const hasReview = !!review;
+
+      currentStarRating = hasReview ? review.rating : 0;
+      currentReviewTags = hasReview && review.tags ? [...review.tags] : [...cafe.tags];
+
+      nameEl.textContent = cafe.name;
+
+      content.innerHTML = `
+        <div class="text-sm text-[#52525b] -mt-1 mb-4">${cafe.address}</div>
+        
+        <div class="mb-5">
+          <div class="form-label">Your rating</div>
+          <div id="sheet-star-rating" class="flex gap-x-3 text-[38px] text-[#d4d4d8]"></div>
+        </div>
+        
+        <div class="mb-5">
+          <div class="form-label">Memory note</div>
+          <textarea id="sheet-review-note" rows="3" class="w-full border border-[#e4e4e7] focus:border-[#7c3aed] rounded-2xl p-3 text-sm">${review && review.note ? review.note : ''}</textarea>
+        </div>
+        
+        <div class="mb-6">
+          <div class="form-label mb-2">Tags</div>
+          <div id="sheet-tags" class="flex flex-wrap gap-2"></div>
+        </div>
+        
+        <button onclick="saveReviewFromSheet()" class="w-full py-3.5 rounded-2xl bg-[#7c3aed] text-white font-semibold text-sm mb-2">
+          ${hasReview ? 'Update memory' : 'Save memory'}
+        </button>
+        ${hasReview ? `<button onclick="clearReviewFromSheet()" class="w-full py-2 text-xs text-[#52525b]">Clear review</button>` : ''}
+      `;
+
+      sheet.style.display = 'block';
+      setTimeout(() => sheet.classList.add('open'), 10);
+
+      // Wire stars and tags for sheet
+      setTimeout(() => {
+        renderSheetStars(cafeId);
+        renderSheetTags(cafeId);
+      }, 30);
+    }
+
+    function renderSheetStars(cafeId) {
+      const c = document.getElementById('sheet-star-rating');
+      if (!c) return;
+      c.innerHTML = '';
+      for (let i = 1; i <= 5; i++) {
+        const s = document.createElement('span');
+        s.className = `star ${i <= currentStarRating ? 'filled' : ''}`;
+        s.textContent = '★';
+        s.onclick = () => { currentStarRating = i; renderSheetStars(cafeId); };
+        c.appendChild(s);
+      }
+    }
+
+    function renderSheetTags(cafeId) {
+      const c = document.getElementById('sheet-tags');
+      if (!c) return;
+      c.innerHTML = '';
+      ALL_TAGS.forEach(tag => {
+        const sel = currentReviewTags.includes(tag);
+        const ch = document.createElement('button');
+        ch.className = `tag-chip px-3 py-1 text-xs ${sel ? 'active' : ''}`;
+        ch.textContent = tag;
+        ch.onclick = () => {
+          if (currentReviewTags.includes(tag)) currentReviewTags = currentReviewTags.filter(t => t !== tag);
+          else currentReviewTags.push(tag);
+          renderSheetTags(cafeId);
+        };
+        c.appendChild(ch);
+      });
+    }
+
+    function closeRightSheet() {
+      const sheet = document.getElementById('right-sheet');
+      if (sheet) {
+        sheet.classList.remove('open');
+        setTimeout(() => {
+          if (sheet) {
+            sheet.style.display = 'none';
+            sheet.classList.remove('open');
+          }
+        }, 360);
+      }
+      // keep selection in desktop sense but since compact, allow re-open
+    }
+
+    function clearReviewFromSheet() {
+      if (!selectedCafeId) return;
+      delete userReviews[selectedCafeId];
+      updateMarkerIcon(selectedCafeId);
+      applyFilters();
+      closeRightSheet();
+      // Re-open sheet to show cleared state (or just close)
+      setTimeout(() => openRightSheet(selectedCafeId), 420);
+    }
+
+    // ========== CORE INIT & HELPERS ==========
+
+    function initFilters() {
+      renderRatingFilters();
+      renderTagFilters();
+      
+      const countEl = document.getElementById('results-count');
+      if (countEl) countEl.textContent = cafes.length;
+      
+      // Initial full list
+      renderResultsList(cafes);
+      
+      // Seed active tag count
+      const tagCount = document.getElementById('active-tag-count');
+      if (tagCount) tagCount.textContent = currentFilters.tags.length;
+    }
+
+    function populateInitialRight() {
+      const container = document.getElementById('right-content');
+      if (container) {
+        // Start with beautiful empty state
+        container.innerHTML = `
+          <div class="flex flex-col items-center justify-center h-full px-8 text-center">
+            <div class="w-16 h-16 rounded-3xl bg-[#f1f0f5] flex items-center justify-center text-4xl mb-5">☕︎</div>
+            <div class="font-semibold text-lg tracking-tight mb-2">Inspector ready</div>
+            <div class="text-sm text-[#52525b] leading-relaxed max-w-[260px]">
+              Select any café from the results list or map markers.<br>
+              The full review form lives here — perfectly contextual.
+            </div>
+            <div class="mt-8 text-[10px] uppercase tracking-widest text-[#7c3aed]">Desktop power experience</div>
+          </div>
+        `;
+      }
+    }
+
+    function initEverything() {
+      initTailwind();
+      
+      // Initial layout check
+      checkLayoutMode();
+      window.addEventListener('resize', () => {
+        checkLayoutMode();
+      });
+
+      initMap();
+      initFilters();
+      populateInitialRight();
+
+      // Seed a couple pre-selected for demo (optional)
+      // We leave none selected so user experiences the flow
+
+      // Keyboard niceties (desktop power)
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          if (selectedCafeId) deselectCafe();
+          else if (document.getElementById('left-drawer').classList.contains('open')) closeLeftDrawer();
+          else if (document.getElementById('right-sheet').classList.contains('open')) closeRightSheet();
+        }
+        if (e.key === '/' && document.activeElement.tagName === 'BODY') {
+          e.preventDefault();
+          document.getElementById('search-input')?.focus();
+        }
+      });
+
+      // Make sure initial map hint is visible
+      setTimeout(() => {
+        const hint = document.getElementById('map-hint');
+        if (hint && !isCompactMode) hint.style.display = 'block';
+      }, 800);
+
+      // Demo tip: auto-select one after a few seconds? No — keep pure so user explores.
+      // console.log('%c[Gumi v7] Desktop power mockup ready. All interactions functional.', 'color:#7c3aed');
+    }
+
+    function toggleLeftSidebar() {
+      const left = document.getElementById('left-sidebar');
+      const wrapper = document.getElementById('map-wrapper');
+      const btnText = document.getElementById('collapse-text');
+      
+      if (!left) return;
+
+      isLeftCollapsed = !isLeftCollapsed;
+      
+      if (isLeftCollapsed) {
+        left.style.width = '0px';
+        left.style.minWidth = '0px';
+        left.style.overflow = 'hidden';
+        left.style.borderRight = 'none';
+        if (btnText) btnText.textContent = 'Show filters';
+      } else {
+        left.style.width = '300px';
+        left.style.minWidth = '280px';
+        left.style.overflow = '';
+        left.style.borderRight = '1px solid #e4e4e7';
+        if (btnText) btnText.textContent = 'Collapse filters';
+      }
+      
+      // Give map breathing room
+      if (wrapper) {
+        wrapper.style.transition = 'all 280ms cubic-bezier(0.2,0,0,1)';
+      }
+    }
+
+    function exportReviews() {
+      const data = JSON.stringify({ cafes, userReviews }, null, 2);
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'gumi-cafe-memories-v7.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      showToast('Exported your private memories');
+    }
+
+    function showToast(message) {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      
+      const toast = document.createElement('div');
+      toast.className = `bg-white text-[#111113] border border-[#e4e4e7] px-6 py-3 rounded-3xl text-sm shadow-xl flex items-center gap-x-2 mb-2`;
+      toast.innerHTML = `<span>${message}</span>`;
+      container.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.transition = 'all 220ms ease';
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 180);
+      }, 2200);
+    }
+
+    function showFeedbackPrompt() {
+      const msg = prompt('Thank you! Any specific feedback on the v7 desktop power layout (filters density, review fluidity, spacing, mobile degrade, etc)?');
+      if (msg) {
+        alert('Feedback captured for the design team. (In real project this would open a Linear issue or email.)');
+      }
+    }
+
+    // Boot
+    window.onload = () => {
+      initEverything();
+    };
+  </script>
+</body>
+</html>

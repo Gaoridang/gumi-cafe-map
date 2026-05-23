@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gumi Cafe Map — v5 Tabbed / Segmented Control</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Playfair+Display:wght@600&amp;display=swap');
+    
+    :root {
+      /* ElevenLabs-inspired DAY / LIGHT premium theme (clean, elegant, no warm tones) — v5 */
+      --bg: #f8f8f9;
+      --card: #ffffff;
+      --text: #111113;
+      --muted: #71717a;
+      --accent: #7c3aed;           /* ElevenLabs signature purple */
+      --accent-light: #a78bfa;
+      --border: #e4e4e7;
+      --highlight: #f4f4f5;
+    }
+    
+    html, body { height: 100%; }
+    body { font-family: 'Inter', system_ui, -apple-system, sans-serif; }
+    .heading { font-family: 'Playfair Display', Georgia, serif; }
+    
+    .cafe-card { transition: all 180ms cubic-bezier(0.2, 0, 0, 1); }
+    .cafe-card:hover { transform: translateY(-1px); box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08); }
+    .cafe-card.selected { border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12); background-color: #fafafa; }
+    
+    .map-container { border-radius: 0; overflow: hidden; }
+    
+    .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.2); }
+    
+    .star { cursor: pointer; transition: transform 120ms ease; }
+    .star:hover { transform: scale(1.15); }
+    .star.filled { color: #7c3aed; }
+    
+    .tag-chip { transition: all 150ms ease; }
+    .tag-chip.active { background-color: #7c3aed; color: white; border-color: #7c3aed; }
+
+    /* Better chip hierarchy on white cards (ElevenLabs-inspired light) */
+    .tag-chip:not(.active) {
+      background-color: #f1f0f5;
+      border-color: #e4e4e7;
+      color: #3f3f46;
+    }
+    .tag-chip:not(.active):hover {
+      background-color: #e4e0f0;
+      border-color: #d1d0d7;
+    }
+    
+    .section-title { font-size: 12px; letter-spacing: 0.5px; font-weight: 600; color: #71717a; }
+    
+    .cafe-marker {
+      width: 34px; height: 34px; border-radius: 9999px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: white;
+      box-shadow: 0 3px 8px rgb(0 0 0 / 0.25), 0 0 0 3px rgba(255,255,255,0.9);
+      border: 2px solid white;
+      transition: transform 200ms cubic-bezier(0.2, 0, 0, 1);
+    }
+    .cafe-marker:hover { transform: scale(1.1); }
+    
+    /* Premium Segmented Control — v5 */
+    .segmented-control {
+      background: #f1f0f5;
+      border: 1px solid #e4e4e7;
+      box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.04);
+    }
+    .seg-tab {
+      padding: 8px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #52525b;
+      border-radius: 9999px;
+      transition: all 160ms cubic-bezier(0.2, 0, 0, 1);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 40px;
+    }
+    .seg-tab.active {
+      background: white;
+      color: #7c3aed;
+      font-weight: 600;
+      box-shadow: 0 1px 3px rgb(0 0 0 / 0.1), 0 0 0 1px rgba(124, 58, 237, 0.08);
+    }
+    .seg-tab:not(.active):hover {
+      background: rgba(255,255,255, 0.65);
+      color: #3f3f46;
+    }
+    
+    /* Tab panes */
+    .tab-pane {
+      transition: opacity 220ms cubic-bezier(0.2, 0, 0, 1), transform 220ms cubic-bezier(0.2, 0, 0, 1);
+    }
+    .tab-pane.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: translateY(4px);
+    }
+    
+    /* Floating elements */
+    .floating-filter {
+      box-shadow: 0 10px 30px -15px rgb(0 0 0 / 0.12), 0 4px 6px -1px rgb(0 0 0 / 0.08);
+      backdrop-filter: blur(12px);
+    }
+    
+    .fab {
+      box-shadow: 0 10px 20px -5px rgb(0 0 0 / 0.15), 0 4px 6px -1px rgb(0 0 0 / 0.1);
+      transition: transform 160ms cubic-bezier(0.2, 0, 0, 1), box-shadow 160ms ease;
+    }
+    .fab:hover { transform: translateY(-1px); box-shadow: 0 14px 25px -6px rgb(0 0 0 / 0.18); }
+    .fab:active { transform: scale(0.985); }
+    
+    /* List view generous spacing */
+    .list-view-card {
+      padding: 16px 20px;
+      margin-bottom: 10px;
+      border-radius: 20px;
+    }
+    
+    .review-panel {
+      box-shadow: 0 -20px 40px -15px rgb(0 0 0 / 0.18);
+    }
+    @media (min-width: 1024px) {
+      .review-panel {
+        box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+      }
+    }
+    
+    .map-hint {
+      font-size: 10px;
+      letter-spacing: 0.3px;
+    }
+  </style>
+</head>
+<body class="bg-[#f8f8f9] text-[#111113] overflow-hidden flex flex-col h-screen">
+  <!-- Top approval bar - ElevenLabs light premium style (v5) -->
+  <div class="bg-white border-b border-[#e4e4e7] text-[#111113] py-2 px-4 text-sm font-medium flex items-center justify-between z-50 relative flex-shrink-0">
+    <div class="flex items-center gap-x-3">
+      <span class="font-semibold tracking-tight">Design Mockup <span class="text-[#7c3aed]">v5</span></span>
+      <span class="text-[#d4d1c7]">•</span>
+      <span class="text-xs opacity-90">Tabbed / Segmented Control — Full-screen Map or List</span>
+      <span class="hidden md:inline text-[10px] px-2 py-0.5 rounded-full bg-[#f1f0f5] text-[#7c3aed] font-medium">mobile-first • premium tabs</span>
+    </div>
+    <div class="flex items-center gap-x-2 text-xs">
+      <button onclick="showFeedbackPrompt()" 
+              class="px-4 py-1.5 rounded-2xl bg-[#7c3aed] hover:bg-[#6d28d9] active:bg-[#5b21b6] transition font-semibold text-white text-sm">
+        👍 Approve this direction
+      </button>
+      <button onclick="showFeedbackPrompt()" 
+              class="px-4 py-1.5 rounded-2xl border border-[#e4e4e7] hover:bg-[#f4f4f5] transition text-sm">
+        Suggest changes
+      </button>
+    </div>
+  </div>
+
+  <!-- Elegant header with prominent premium segmented control -->
+  <div class="h-14 border-b border-[#e4e4e7] bg-white/95 backdrop-blur-md flex items-center px-4 z-[900] relative flex-shrink-0">
+    <div class="flex items-center gap-x-3 flex-1 min-w-0">
+      <div class="w-8 h-8 bg-[#7c3aed] rounded-2xl flex items-center justify-center text-white text-xl shadow-inner flex-shrink-0">☕</div>
+      <div class="min-w-0">
+        <span class="font-semibold tracking-tighter text-[21px] leading-none">Gumi Cafe Map</span>
+      </div>
+      <div class="text-xs text-[#52525b] hidden sm:block pl-1">Discover • Log • Remember</div>
+    </div>
+
+    <!-- Prominent Centered Segmented Control -->
+    <div class="flex-1 flex justify-center px-2">
+      <div class="segmented-control flex rounded-3xl p-0.5 border border-[#e4e4e7] shadow-sm">
+        <button onclick="switchTab('map')" id="tab-map"
+                class="seg-tab active flex items-center gap-x-1.5">
+          <span class="text-base">🗺️</span>
+          <span class="font-semibold">Map</span>
+        </button>
+        <button onclick="switchTab('list')" id="tab-list"
+                class="seg-tab flex items-center gap-x-1.5">
+          <span class="text-base">📋</span>
+          <span>List</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-x-3 text-sm flex-1 justify-end">
+      <div class="hidden md:flex items-center gap-x-1.5 text-right text-xs pr-1">
+        <div><span class="font-semibold text-[#7c3aed]">8</span> <span class="text-[#52525b]">reviewed</span></div>
+        <div class="w-px h-3 bg-[#e4e4e7]"></div>
+        <div class="text-[#52525b]">12 total</div>
+      </div>
+
+      <button onclick="exportReviews()" 
+              class="flex items-center gap-x-1.5 px-3.5 py-1.5 rounded-2xl bg-white border border-[#e4e4e7] hover:border-[#7c3aed]/60 text-xs font-medium transition shadow-sm text-[#111113]">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.25" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        <span class="hidden sm:inline">Export</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main content area: two full-bleed tab panes -->
+  <div id="main-area" class="flex-1 relative overflow-hidden" style="height: calc(100vh - 57px - 33px);">
+    
+    <!-- MAP PANE: Full-bleed beautiful map -->
+    <div id="map-pane" class="tab-pane absolute inset-0">
+      <!-- The actual Leaflet map (full bleed) -->
+      <div id="map" class="absolute inset-0 map-container z-10"></div>
+
+      <!-- Floating compact search + filters (top-left over map — clean & premium) -->
+      <div class="absolute top-3 left-3 z-[800] pointer-events-auto">
+        <div class="floating-filter border border-[#e4e4e7] rounded-3xl shadow-xl p-2 flex flex-col gap-y-2 min-w-[218px] bg-white/95">
+          
+          <!-- Prominent but slim search -->
+          <div class="relative">
+            <input id="search-input-map" type="text" placeholder="Search name or note..." 
+                   onkeyup="handleSearchChange('map', this.value)"
+                   class="w-full bg-white border border-[#e4e4e7] focus:border-[#7c3aed] rounded-2xl pl-9 py-2 text-sm placeholder:text-[#71717a] outline-none text-[#111113]">
+            <svg class="w-4 h-4 absolute left-3.5 top-2.5 text-[#71717a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+          </div>
+
+          <!-- Ultra-compact filters row -->
+          <div class="flex items-center gap-x-2">
+            <!-- Rating mini -->
+            <div class="flex items-center gap-x-px" id="rating-filters-map">
+              <!-- JS populated compact pills -->
+            </div>
+
+            <!-- Tags trigger (opens popover) -->
+            <button onclick="toggleFilterPopover()" 
+                    class="flex items-center gap-x-1 px-3 py-1 text-xs font-medium rounded-2xl border border-[#e4e4e7] hover:bg-[#f4f4f5] active:bg-[#f1f0f5] transition text-[#3f3f46]">
+              <span>Tags</span>
+              <span id="active-tag-count" class="text-[10px] px-1 py-px rounded bg-[#f1f0f5] text-[#7c3aed] font-mono min-w-[14px] text-center">0</span>
+            </button>
+
+            <button onclick="resetFilters()" 
+                    class="text-[10px] px-2.5 py-1 rounded-2xl border border-[#e4e4e7] hover:bg-[#f1f0f5] text-[#71717a] transition">Clear</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filter Popover (shared) -->
+      <div id="filter-popover" class="hidden absolute top-[92px] left-3 z-[900] bg-white border border-[#e4e4e7] rounded-3xl p-4 shadow-2xl w-72">
+        <div class="flex justify-between items-center mb-2">
+          <div class="text-xs font-semibold tracking-wider text-[#3f3f46]">FILTER BY TAGS</div>
+          <button onclick="toggleFilterPopover()" class="text-[#7c3aed] text-lg leading-none">×</button>
+        </div>
+        <div id="tag-filters" class="flex flex-wrap gap-1.5 max-h-[140px] overflow-auto pr-1">
+          <!-- Populated by renderTagFilters() -->
+        </div>
+        <div class="text-[10px] text-[#71717a] mt-3">Selection updates map &amp; list instantly.</div>
+      </div>
+
+      <!-- Floating "Show List" FAB -->
+      <button id="fab-show-list" onclick="switchTab('list')"
+              class="fab absolute bottom-4 right-4 z-[850] flex items-center gap-x-2 px-5 py-2.5 rounded-3xl bg-white border border-[#e4e4e7] text-sm font-semibold text-[#111113] active:scale-[0.985]">
+        <span class="text-base">📋</span>
+        <span>Show List</span>
+        <span id="fab-count" class="font-mono text-xs px-1.5 py-0.5 bg-[#f1f0f5] rounded text-[#7c3aed]">10</span>
+      </button>
+
+      <!-- Subtle map footer hint -->
+      <div class="absolute bottom-3 left-1/2 -translate-x-1/2 z-[400] text-[9px] text-[#71717a]/70 pointer-events-none hidden lg:flex items-center gap-x-1.5 map-hint bg-white/90 backdrop-blur-md border border-[#e4e4e7] rounded-2xl px-3 py-1">
+        <span>Tap markers to review</span>
+        <span class="text-[#7c3aed]">•</span>
+        <span>Use tabs to switch views</span>
+      </div>
+
+      <!-- Leaflet attribution (subtle) -->
+      <div class="absolute bottom-1 left-1/2 -translate-x-1/2 z-[400] text-[9px] text-[#71717a]/70 pointer-events-none hidden lg:block">
+        OpenStreetMap
+      </div>
+    </div>
+
+    <!-- LIST PANE: Full clean list with filters above -->
+    <div id="list-pane" class="tab-pane absolute inset-0 hidden flex flex-col bg-[#f8f8f9]">
+      
+      <!-- List filters bar (generous, clean, above the list) -->
+      <div class="bg-white border-b border-[#e4e4e7] px-4 py-3 sticky top-0 z-[850]">
+        <div class="flex flex-col gap-3">
+          <!-- Search (more generous in list view) -->
+          <div class="relative">
+            <input id="search-input-list" type="text" placeholder="Search cafes or your notes..." 
+                   onkeyup="handleSearchChange('list', this.value)"
+                   class="w-full bg-white border border-[#e4e4e7] focus:border-[#7c3aed] rounded-2xl pl-10 py-3 text-sm placeholder:text-[#71717a] outline-none text-[#111113]">
+            <svg class="w-4 h-4 absolute left-4 top-3.5 text-[#71717a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+          </div>
+
+          <!-- Filters row: rating + tags (expanded for list view) -->
+          <div class="flex items-start gap-x-3 flex-wrap">
+            <!-- Rating -->
+            <div>
+              <div class="text-[10px] font-semibold text-[#71717a] mb-1 px-0.5">RATING</div>
+              <div id="rating-filters-list" class="flex items-center gap-x-1"></div>
+            </div>
+
+            <!-- Tags (inline, generous) -->
+            <div class="flex-1 min-w-[180px]">
+              <div class="text-[10px] font-semibold text-[#71717a] mb-1 px-0.5">TAGS</div>
+              <div id="tag-filters-list" class="flex flex-wrap gap-1.5"></div>
+            </div>
+
+            <div class="pt-5">
+              <button onclick="resetFilters()" 
+                      class="text-xs px-3 py-1.5 rounded-2xl border border-[#e4e4e7] hover:bg-[#f1f0f5] text-[#71717a] transition font-medium">Clear all</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- List header with count -->
+      <div class="px-4 pt-3 pb-1 flex items-center justify-between bg-[#f8f8f9]">
+        <div class="font-semibold text-sm flex items-center gap-x-2 text-[#111113]">
+          Cafes 
+          <span id="list-count-full" class="text-[#7c3aed] font-mono text-xs px-1.5 py-px bg-white rounded border border-[#e4e4e7]">10</span>
+        </div>
+        <div class="text-[10px] text-[#71717a]">Tap any row to review</div>
+      </div>
+
+      <!-- Scrollable generous full list -->
+      <div id="cafe-list-full" class="flex-1 overflow-y-auto px-3 pt-1 pb-20 bg-[#f8f8f9] space-y-2 text-sm">
+        <!-- Populated by JavaScript -->
+      </div>
+
+      <!-- "Show Map" button (bottom, prominent but not blocking) -->
+      <div class="absolute bottom-4 left-1/2 -translate-x-1/2 z-[860]">
+        <button onclick="switchTab('map')"
+                class="fab flex items-center gap-x-2 px-6 py-2.5 rounded-3xl bg-white border border-[#e4e4e7] text-sm font-semibold text-[#111113] shadow-sm active:scale-[0.985]">
+          <span class="text-base">🗺️</span>
+          <span>Show Map</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Review Panel — same excellent fast flow, works over both tabs -->
+  <div id="review-panel" 
+       class="review-panel hidden fixed bottom-0 left-0 right-0 lg:absolute lg:bottom-4 lg:right-4 lg:left-auto lg:w-[370px] bg-white border border-[#e4e4e7] rounded-t-3xl lg:rounded-3xl shadow-2xl z-[9999]">
+    <div class="p-5">
+      <!-- Header -->
+      <div class="flex justify-between items-start mb-4">
+        <div class="min-w-0 pr-2">
+          <div id="panel-cafe-name" class="font-semibold text-[19px] tracking-tighter text-[#111113]"></div>
+          <div id="panel-cafe-address" class="text-sm text-[#52525b] truncate"></div>
+        </div>
+        <button onclick="closeReviewPanel()" class="text-3xl leading-none text-[#52525b] hover:text-[#7c3aed] transition -mt-1">×</button>
+      </div>
+
+      <!-- Stars -->
+      <div class="mb-5">
+        <div class="section-title mb-1.5">How was your visit?</div>
+        <div id="star-rating" class="flex gap-x-1 text-4xl">
+          <!-- JS stars -->
+        </div>
+      </div>
+
+      <!-- Note -->
+      <div class="mb-4">
+        <div class="section-title mb-1.5">Quick memory (optional)</div>
+        <textarea id="review-note" rows="3" placeholder="Loved the quiet corner and oat latte..." 
+                  class="w-full border border-[#e4e4e7] rounded-2xl p-3 text-sm focus:border-[#7c3aed] resize-y outline-none"></textarea>
+      </div>
+
+      <!-- Tags -->
+      <div class="mb-5">
+        <div class="section-title mb-2">Tags</div>
+        <div id="panel-tags" class="flex flex-wrap gap-1.5">
+          <!-- populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex gap-x-3">
+        <button onclick="saveReview()" 
+                class="flex-1 py-3.5 rounded-2xl bg-[#7c3aed] hover:bg-[#6d28d9] active:bg-[#5b21b6] transition text-white font-semibold text-sm tracking-wide">
+          Save memory
+        </button>
+        <button onclick="closeReviewPanel()" 
+                class="px-6 py-3.5 rounded-2xl border border-[#e4e4e7] text-sm font-medium hover:bg-[#f4f4f5] active:bg-[#f1f0f5]">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Realistic Gumi cafe data (identical across all approved mocks)
+    const cafes = [
+      { id: "c1", name: "Bean Story", address: "Gumi-si, near the river", lat: 36.1195, lng: 128.3447, tags: ["WiFi", "Quiet", "Power"], avgRating: 4.6 },
+      { id: "c2", name: "라떼하우스", address: "Indong-dong, Gumi", lat: 36.1123, lng: 128.3512, tags: ["Dessert", "Cozy", "WiFi"], avgRating: 4.2 },
+      { id: "c3", name: "구미 커피 로스터스", address: "Industrial complex area", lat: 36.1251, lng: 128.3389, tags: ["Power", "Work-friendly", "Great Coffee"], avgRating: 4.8 },
+      { id: "c4", name: "Quiet Corner Cafe", address: "Near Gumi Station", lat: 36.1089, lng: 128.3621, tags: ["Quiet", "View", "Cozy"], avgRating: 3.9 },
+      { id: "c5", name: "오트밀 & 라떼", address: "Seonsan-myeon", lat: 36.1344, lng: 128.3298, tags: ["Dessert", "WiFi", "Great Coffee"], avgRating: 4.5 },
+      { id: "c6", name: "The Daily Bean", address: "Gumi City Hall area", lat: 36.1158, lng: 128.3476, tags: ["Power", "Work-friendly", "Quiet"], avgRating: 4.1 },
+      { id: "c7", name: "카페 포레스트", address: "Near the park", lat: 36.1228, lng: 128.3554, tags: ["View", "Cozy", "Dessert"], avgRating: 4.7 },
+      { id: "c8", name: "Morning Roastery", address: "Wonpyeong-dong", lat: 36.1052, lng: 128.3411, tags: ["Great Coffee", "Power", "WiFi"], avgRating: 4.3 },
+      { id: "c9", name: "Hidden Table", address: "Residential street", lat: 36.1301, lng: 128.3629, tags: ["Quiet", "Cozy"], avgRating: 4.0 },
+      { id: "c10", name: "Gumi Sky Cafe", address: "High floor with view", lat: 36.1180, lng: 128.3490, tags: ["View", "Dessert", "Cozy"], avgRating: 4.9 }
+    ];
+
+    // User reviews (persisted only in this mockup session)
+    let userReviews = {
+      "c1": { rating: 5, note: "Best quiet spot for deep work. Excellent flat white.", tags: ["Quiet", "Power", "WiFi"] },
+      "c3": { rating: 5, note: "Amazing single origin pour-over. Will return.", tags: ["Great Coffee", "Power"] },
+      "c7": { rating: 4, note: "Beautiful view of the mountains. Great for dates.", tags: ["View", "Cozy"] }
+    };
+
+    let map;
+    let markers = {};
+    let selectedCafeId = null;
+    let currentFilters = { search: "", minRating: 0, tags: [] };
+    let currentTab = 'map';
+    let isMobile = false;
+
+    const ALL_TAGS = ["WiFi", "Quiet", "Power", "Dessert", "View", "Work-friendly", "Great Coffee", "Cozy"];
+
+    function checkMobile() {
+      isMobile = window.innerWidth < 768;
+    }
+
+    function initMap() {
+      map = L.map('map', { 
+        zoomControl: true,
+        attributionControl: false 
+      }).setView([36.1195, 128.3447], 13.8);
+      
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
+        className: 'map-tiles'
+      }).addTo(map);
+
+      // Add markers
+      cafes.forEach(cafe => {
+        const rating = userReviews[cafe.id] ? userReviews[cafe.id].rating : cafe.avgRating;
+        const color = getRatingColor(rating);
+        
+        const icon = L.divIcon({
+          className: '',
+          html: `<div class="cafe-marker" style="background:${color}; font-size:11px;">${rating.toFixed(1)}</div>`,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+          popupAnchor: [0, -20]
+        });
+
+        const marker = L.marker([cafe.lat, cafe.lng], { icon }).addTo(map);
+        
+        marker.on('click', () => {
+          selectCafe(cafe.id);
+        });
+        
+        markers[cafe.id] = marker;
+      });
+
+      // Initial beautiful fit
+      map.fitBounds(cafes.map(c => [c.lat, c.lng]), { padding: [40, 40], maxZoom: 15 });
+    }
+
+    function getRatingColor(rating) {
+      if (rating >= 4.5) return '#7c3aed';
+      if (rating >= 4.0) return '#a78bfa';
+      if (rating >= 3.5) return '#6366f1';
+      return '#4b5563';
+    }
+
+    function getFilteredCafes() {
+      const searchTerm = currentFilters.search.toLowerCase().trim();
+
+      return cafes.filter(cafe => {
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+        
+        const matchesSearch = !searchTerm || 
+          cafe.name.toLowerCase().includes(searchTerm) || 
+          (review && review.note && review.note.toLowerCase().includes(searchTerm));
+        
+        const matchesRating = rating >= currentFilters.minRating;
+        
+        const cafeTags = review ? review.tags : cafe.tags;
+        const matchesTags = currentFilters.tags.length === 0 || 
+          currentFilters.tags.some(t => cafeTags.includes(t));
+        
+        return matchesSearch && matchesRating && matchesTags;
+      });
+    }
+
+    function renderList(filteredCafes, containerId = 'cafe-list-full') {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      container.innerHTML = '';
+      
+      // Update count if it's the main list count
+      const countEl = document.getElementById('list-count-full');
+      if (countEl) countEl.textContent = filteredCafes.length;
+
+      // Also keep legacy count if present (for parity)
+      const legacyCount = document.getElementById('list-count');
+      if (legacyCount) legacyCount.textContent = filteredCafes.length;
+
+      filteredCafes.forEach(cafe => {
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+        
+        const isSelected = selectedCafeId === cafe.id;
+        
+        const div = document.createElement('div');
+        div.className = `cafe-card list-view-card bg-white border cursor-pointer flex justify-between items-start gap-3 ${isSelected ? 'selected border-[#7c3aed] bg-[#fafafa]' : 'border-[#e4e4e7] hover:border-[#7c3aed]/50'}`;
+        div.setAttribute('data-cafe-id', cafe.id);
+        
+        div.innerHTML = `
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold text-[15px] leading-tight tracking-[-0.1px]">${cafe.name}</div>
+            <div class="text-[12px] text-[#52525b] truncate mt-0.5">${cafe.address}</div>
+            
+            <div class="flex items-center gap-x-2 mt-2">
+              <div class="flex text-[#7c3aed]">
+                ${Array.from({length: 5}).map((_, i) => 
+                  `<span class="text-[15px] ${i < Math.round(rating) ? '★' : '☆'}"></span>`
+                ).join('')}
+              </div>
+              <span class="font-mono text-xs font-semibold text-[#3f3f46] tabular-nums">${rating}</span>
+            </div>
+            
+            ${review && review.tags && review.tags.length ? `
+              <div class="flex flex-wrap gap-1 mt-2">
+                ${review.tags.slice(0, 3).map(tag => 
+                  `<span class="text-[10px] px-2 py-px rounded-full bg-[#f1f0f5] text-[#3f3f46]">${tag}</span>`
+                ).join('')}
+              </div>` : ''}
+          </div>
+          
+          <div class="text-right flex-shrink-0 pt-0.5">
+            ${review ? 
+              `<div class="text-emerald-600 text-[10px] font-semibold tracking-wider">REVIEWED</div>` : 
+              `<div class="text-[#71717a] text-[10px]">Not reviewed</div>`}
+            <div class="text-[9px] text-[#a1a1aa] mt-px">Tap to edit</div>
+          </div>
+        `;
+        
+        div.onclick = () => selectCafe(cafe.id);
+        container.appendChild(div);
+      });
+    }
+
+    function renderRatingFilters(view = 'map') {
+      const containerId = view === 'map' ? 'rating-filters-map' : 'rating-filters-list';
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      container.innerHTML = '';
+      
+      const ratings = [0, 3.5, 4.0, 4.5];
+      
+      ratings.forEach(rating => {
+        const btn = document.createElement('button');
+        const active = currentFilters.minRating === rating;
+        
+        if (view === 'map') {
+          btn.className = `px-2.5 py-0.5 text-xs rounded-2xl border transition font-medium ${active ? 'bg-[#7c3aed] text-white border-[#7c3aed]' : 'border-[#e4e4e7] bg-white hover:bg-[#f4f4f5] text-[#3f3f46]'}`;
+          btn.textContent = rating === 0 ? 'Any' : `${rating}+`;
+        } else {
+          // More generous in list view
+          btn.className = `px-3 py-1 text-xs rounded-2xl border transition font-medium ${active ? 'bg-[#7c3aed] text-white border-[#7c3aed]' : 'border-[#e4e4e7] bg-white hover:bg-[#f4f4f5] text-[#3f3f46]'}`;
+          btn.textContent = rating === 0 ? 'Any rating' : `${rating}+`;
+        }
+        
+        btn.onclick = () => {
+          currentFilters.minRating = rating;
+          applyFiltersAndRender();
+          renderRatingFilters('map');
+          renderRatingFilters('list');
+        };
+        container.appendChild(btn);
+      });
+    }
+
+    function renderTagFilters(view = 'map') {
+      if (view === 'map') {
+        const container = document.getElementById('tag-filters');
+        if (!container) return;
+        container.innerHTML = '';
+        
+        ALL_TAGS.forEach(tag => {
+          const isActive = currentFilters.tags.includes(tag);
+          const btn = document.createElement('button');
+          btn.className = `tag-chip px-3 py-1 rounded-2xl text-xs border transition whitespace-nowrap ${isActive ? 'active bg-[#7c3aed] text-white border-[#7c3aed]' : 'border-[#e4e4e7] text-[#3f3f46]'}`;
+          btn.textContent = tag;
+          btn.onclick = () => toggleTagFilter(tag);
+          container.appendChild(btn);
+        });
+        updateActiveTagCount();
+      } else {
+        // List view: inline generous chips
+        const container = document.getElementById('tag-filters-list');
+        if (!container) return;
+        container.innerHTML = '';
+        
+        ALL_TAGS.forEach(tag => {
+          const isActive = currentFilters.tags.includes(tag);
+          const btn = document.createElement('button');
+          btn.className = `tag-chip px-3 py-1 rounded-2xl text-xs border transition whitespace-nowrap ${isActive ? 'active bg-[#7c3aed] text-white border-[#7c3aed]' : 'border-[#e4e4e7] text-[#3f3f46]'}`;
+          btn.textContent = tag;
+          btn.onclick = () => {
+            toggleTagFilter(tag);
+            // re-render list tags
+            renderTagFilters('list');
+            renderTagFilters('map');
+          };
+          container.appendChild(btn);
+        });
+      }
+    }
+
+    function updateActiveTagCount() {
+      const el = document.getElementById('active-tag-count');
+      if (el) el.textContent = currentFilters.tags.length;
+    }
+
+    function toggleTagFilter(tag) {
+      if (currentFilters.tags.includes(tag)) {
+        currentFilters.tags = currentFilters.tags.filter(t => t !== tag);
+      } else {
+        currentFilters.tags.push(tag);
+      }
+      applyFiltersAndRender();
+      renderTagFilters('map');
+      renderTagFilters('list');
+    }
+
+    function handleSearchChange(view, value) {
+      currentFilters.search = value;
+      
+      // Sync the other search input
+      const otherId = view === 'map' ? 'search-input-list' : 'search-input-map';
+      const otherInput = document.getElementById(otherId);
+      if (otherInput) otherInput.value = value;
+      
+      applyFiltersAndRender();
+    }
+
+    function applyFiltersAndRender() {
+      const filtered = getFilteredCafes();
+      
+      // Always update map markers (opacity + rating color)
+      updateMapMarkers(filtered);
+      
+      // Update list only if currently on list tab
+      if (currentTab === 'list') {
+        renderList(filtered, 'cafe-list-full');
+      }
+      
+      // Update counts
+      const fabCount = document.getElementById('fab-count');
+      if (fabCount) fabCount.textContent = filtered.length;
+      
+      updateActiveTagCount();
+    }
+
+    function updateMapMarkers(filteredCafes) {
+      if (!map) return;
+      
+      Object.values(markers).forEach(m => m.setOpacity(0.18));
+      
+      filteredCafes.forEach(cafe => {
+        const marker = markers[cafe.id];
+        if (!marker) return;
+        
+        marker.setOpacity(1);
+        
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+        const color = getRatingColor(rating);
+        
+        const newIcon = L.divIcon({
+          className: '',
+          html: `<div class="cafe-marker" style="background:${color}; font-size:11px;">${rating.toFixed(1)}</div>`,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17]
+        });
+        marker.setIcon(newIcon);
+      });
+    }
+
+    function resetFilters() {
+      currentFilters = { search: "", minRating: 0, tags: [] };
+      
+      // Clear both search inputs
+      const mapSearch = document.getElementById('search-input-map');
+      const listSearch = document.getElementById('search-input-list');
+      if (mapSearch) mapSearch.value = '';
+      if (listSearch) listSearch.value = '';
+      
+      renderTagFilters('map');
+      renderTagFilters('list');
+      renderRatingFilters('map');
+      renderRatingFilters('list');
+      
+      applyFiltersAndRender();
+    }
+
+    function selectCafe(cafeId) {
+      selectedCafeId = cafeId;
+      const cafe = cafes.find(c => c.id === cafeId);
+      if (!cafe) return;
+
+      // Re-render lists (in whichever view is active) to show selection highlight
+      const filtered = getFilteredCafes();
+      if (currentTab === 'list') {
+        renderList(filtered, 'cafe-list-full');
+      } else {
+        // If on map, still keep list state in sync for when user switches
+        // (no-op here since list pane is hidden)
+      }
+
+      // Fly map to location if map exists (works cross-tab)
+      if (map && markers[cafeId]) {
+        map.flyTo([cafe.lat, cafe.lng], 16.5, { duration: 0.6 });
+        markers[cafeId].openPopup();
+      }
+
+      // Open the excellent fast review flow (works from either tab)
+      openReviewPanel(cafeId);
+    }
+
+    let currentReviewCafeId = null;
+    let currentStarRating = 0;
+
+    function openReviewPanel(cafeId) {
+      currentReviewCafeId = cafeId;
+      const cafe = cafes.find(c => c.id === cafeId);
+      const existing = userReviews[cafeId] || {};
+
+      document.getElementById('panel-cafe-name').textContent = cafe.name;
+      document.getElementById('panel-cafe-address').textContent = cafe.address;
+
+      currentStarRating = existing.rating || 4;
+      renderStars();
+
+      document.getElementById('review-note').value = existing.note || '';
+
+      renderPanelTags(cafe, existing.tags || []);
+
+      const panel = document.getElementById('review-panel');
+      panel.classList.remove('hidden');
+      panel.classList.add('lg:block');
+    }
+
+    function renderStars() {
+      const container = document.getElementById('star-rating');
+      container.innerHTML = '';
+      
+      for (let i = 1; i <= 5; i++) {
+        const star = document.createElement('span');
+        star.className = `star text-4xl ${i <= currentStarRating ? 'filled' : 'text-[#d4d4d8]'}`;
+        star.textContent = '★';
+        star.onclick = () => {
+          currentStarRating = i;
+          renderStars();
+        };
+        container.appendChild(star);
+      }
+    }
+
+    function renderPanelTags(cafe, selectedTags) {
+      const container = document.getElementById('panel-tags');
+      container.innerHTML = '';
+      
+      const allTags = [...new Set([...cafe.tags, ...ALL_TAGS])].slice(0, 8);
+      
+      allTags.forEach(tag => {
+        const isSelected = selectedTags.includes(tag);
+        const chip = document.createElement('button');
+        chip.className = `tag-chip px-3 py-1 text-xs border rounded-2xl whitespace-nowrap ${isSelected ? 'active bg-[#7c3aed] text-white border-[#7c3aed]' : 'border-[#e4e4e7] text-[#3f3f46]'}`;
+        chip.textContent = tag;
+        
+        chip.onclick = () => {
+          let newTags = [...selectedTags];
+          if (newTags.includes(tag)) {
+            newTags = newTags.filter(t => t !== tag);
+          } else {
+            newTags.push(tag);
+          }
+          renderPanelTags(cafe, newTags);
+        };
+        container.appendChild(chip);
+      });
+    }
+
+    function saveReview() {
+      if (!currentReviewCafeId) return;
+      
+      const note = document.getElementById('review-note').value.trim();
+      const tagChips = document.getElementById('panel-tags').querySelectorAll('.tag-chip');
+      let tags = [];
+      
+      tagChips.forEach(chip => {
+        if (chip.classList.contains('active')) {
+          tags.push(chip.textContent);
+        }
+      });
+
+      userReviews[currentReviewCafeId] = {
+        rating: currentStarRating,
+        note: note || undefined,
+        tags: tags
+      };
+
+      closeReviewPanel();
+
+      // Refresh everything
+      applyFiltersAndRender();
+      
+      // Update marker live
+      const cafe = cafes.find(c => c.id === currentReviewCafeId);
+      if (cafe && markers[currentReviewCafeId]) {
+        const newColor = getRatingColor(currentStarRating);
+        const newIcon = L.divIcon({
+          className: '',
+          html: `<div class="cafe-marker" style="background:${newColor}; font-size:11px;">${currentStarRating.toFixed(1)}</div>`,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17]
+        });
+        markers[currentReviewCafeId].setIcon(newIcon);
+      }
+
+      // If we are on list tab, ensure the list reflects the new review state
+      if (currentTab === 'list') {
+        const filtered = getFilteredCafes();
+        renderList(filtered, 'cafe-list-full');
+      }
+
+      showToast(`Saved for ${cafe.name} ★`);
+    }
+
+    function closeReviewPanel() {
+      const panel = document.getElementById('review-panel');
+      panel.classList.add('hidden');
+      panel.classList.remove('lg:block');
+      currentReviewCafeId = null;
+    }
+
+    function showToast(message) {
+      const toast = document.createElement('div');
+      toast.className = `fixed bottom-5 left-1/2 -translate-x-1/2 bg-white text-[#111113] border border-[#e4e4e7] px-5 py-2.5 rounded-3xl text-sm shadow-xl flex items-center gap-x-2 z-[99999]`;
+      toast.innerHTML = `<span>${message}</span>`;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.transition = 'all 220ms';
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 180);
+      }, 2100);
+    }
+
+    function updateFabCount() {
+      const fabCount = document.getElementById('fab-count');
+      if (fabCount) {
+        // show total or filtered? filtered is nicer
+        const filtered = getFilteredCafes();
+        fabCount.textContent = filtered.length;
+      }
+    }
+
+    function switchTab(tab) {
+      const mapPane = document.getElementById('map-pane');
+      const listPane = document.getElementById('list-pane');
+      const btnMap = document.getElementById('tab-map');
+      const btnList = document.getElementById('tab-list');
+
+      currentTab = tab;
+
+      if (tab === 'map') {
+        mapPane.classList.remove('hidden');
+        listPane.classList.add('hidden');
+        
+        btnMap.classList.add('active');
+        btnList.classList.remove('active');
+
+        // Sync search input value
+        const mapSearch = document.getElementById('search-input-map');
+        const listSearch = document.getElementById('search-input-list');
+        if (mapSearch && listSearch) mapSearch.value = listSearch.value;
+
+        // Refresh map size and selection sync
+        setTimeout(() => {
+          if (map) {
+            map.invalidateSize({ animate: true });
+          }
+          if (selectedCafeId && markers[selectedCafeId]) {
+            const cafe = cafes.find(c => c.id === selectedCafeId);
+            if (cafe) {
+              map.flyTo([cafe.lat, cafe.lng], 15.5, { duration: 0.45 });
+            }
+          }
+        }, 220);
+
+        updateFabCount();
+      } else {
+        mapPane.classList.add('hidden');
+        listPane.classList.remove('hidden');
+        
+        btnMap.classList.remove('active');
+        btnList.classList.add('active');
+
+        // Sync search value
+        const mapSearch = document.getElementById('search-input-map');
+        const listSearch = document.getElementById('search-input-list');
+        if (mapSearch && listSearch) listSearch.value = mapSearch.value;
+
+        // Render fresh list with current filters + selection highlight
+        const filtered = getFilteredCafes();
+        renderList(filtered, 'cafe-list-full');
+
+        // Scroll to selected if any (smooth, generous)
+        setTimeout(() => {
+          if (selectedCafeId) {
+            const selectedEl = document.querySelector(`#cafe-list-full [data-cafe-id="${selectedCafeId}"]`);
+            if (selectedEl) {
+              selectedEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }
+        }, 280);
+
+        renderRatingFilters('list');
+        renderTagFilters('list');
+      }
+
+      // Keep filter UIs in sync
+      renderRatingFilters('map');
+      renderTagFilters('map');
+      updateFabCount();
+    }
+
+    function toggleFilterPopover() {
+      const pop = document.getElementById('filter-popover');
+      pop.classList.toggle('hidden');
+      
+      // Ensure tags are fresh when opening
+      if (!pop.classList.contains('hidden')) {
+        renderTagFilters('map');
+      }
+    }
+
+    function initializeFilters() {
+      // Map view compact filters
+      renderRatingFilters('map');
+      renderTagFilters('map');
+      
+      // List view filters (will be rendered when tab is activated)
+      renderRatingFilters('list');
+      renderTagFilters('list');
+      
+      // Initial filter pass (applies to map markers)
+      setTimeout(() => {
+        applyFiltersAndRender();
+      }, 90);
+    }
+
+    function initializeData() {
+      if (Object.keys(userReviews).length < 6) {
+        userReviews["c2"] = { rating: 4, note: "Nice atmosphere for reading.", tags: ["Cozy", "Dessert"] };
+        userReviews["c5"] = { rating: 5, note: "Best oat milk latte in town.", tags: ["Great Coffee", "WiFi"] };
+        userReviews["c8"] = { rating: 4, note: "Solid pour over and great outlets.", tags: ["Power", "Great Coffee"] };
+        userReviews["c4"] = { rating: 3.5, note: "Quiet but a bit small.", tags: ["Quiet"] };
+      }
+    }
+
+    function exportReviews() {
+      const data = {
+        exportedAt: new Date().toISOString(),
+        cafes: cafes,
+        reviews: userReviews,
+        mode: "v5-tabbed-segmented"
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gumi-cafe-reviews-v5-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function showFeedbackPrompt() {
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[99999]';
+      modal.innerHTML = `
+        <div class="bg-white max-w-md w-full mx-4 rounded-3xl p-6 shadow-2xl">
+          <h3 class="font-semibold text-xl tracking-tight mb-1">v5 Tabbed feedback</h3>
+          <p class="text-sm text-[#3f3f46] mb-5">Full-screen Map ↔ List via premium segmented control. Floating controls on map, generous filters on list. Fast bidirectional review flow preserved.</p>
+          
+          <div class="space-y-2 text-sm">
+            <button onclick="handleFeedback('Excellent clean tab experience — exactly what I wanted. Ready for React.')" class="w-full text-left px-4 py-3 rounded-2xl border hover:bg-[#f1f0f5]">✅ Excellent clean tab experience — exactly what I wanted. Ready for React.</button>
+            <button onclick="handleFeedback('Love the premium segmented control and generous list spacing.')" class="w-full text-left px-4 py-3 rounded-2xl border hover:bg-[#f1f0f5]">✨ Love the premium segmented control and generous list spacing.</button>
+            <button onclick="handleFeedback('Perfect mobile-first feel. Switching feels instant and natural.')" class="w-full text-left px-4 py-3 rounded-2xl border hover:bg-[#f1f0f5]">📱 Perfect mobile-first feel. Switching feels instant and natural.</button>
+            <button onclick="handleFeedback('Other (describe in chat)')" class="w-full text-left px-4 py-3 rounded-2xl border hover:bg-[#f1f0f5]">💬 Other feedback</button>
+          </div>
+          
+          <button onclick="this.closest('.fixed').remove()" class="mt-5 w-full text-xs py-2 text-[#71717a]">Close</button>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    function handleFeedback(message) {
+      const modal = document.querySelector('.fixed.inset-0');
+      if (modal) modal.remove();
+      
+      alert(`Thank you! Feedback noted:\n\n"${message}"\n\nThis will inform the final React implementation of the tabbed experience.`);
+    }
+
+    function initializeResponsive() {
+      checkMobile();
+      window.addEventListener('resize', () => {
+        checkMobile();
+        if (map) map.invalidateSize();
+        updateFabCount();
+      });
+    }
+
+    // Boot everything for v5
+    function bootMockup() {
+      initializeData();
+      initializeResponsive();
+
+      // Start on Map tab (default)
+      const mapPane = document.getElementById('map-pane');
+      const listPane = document.getElementById('list-pane');
+      const btnMap = document.getElementById('tab-map');
+      const btnList = document.getElementById('tab-list');
+
+      mapPane.classList.remove('hidden');
+      listPane.classList.add('hidden');
+      btnMap.classList.add('active');
+      btnList.classList.remove('active');
+      currentTab = 'map';
+
+      initMap();
+      initializeFilters();
+
+      // Seed initial filtered state
+      setTimeout(() => {
+        if (map) {
+          map.invalidateSize();
+          map.panTo([36.118, 128.348], { animate: false });
+        }
+        updateFabCount();
+      }, 420);
+
+      // Keyboard support (Esc + Cmd/Ctrl+L to toggle tabs)
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          const panel = document.getElementById('review-panel');
+          const pop = document.getElementById('filter-popover');
+          if (!panel.classList.contains('hidden')) {
+            closeReviewPanel();
+          } else if (!pop.classList.contains('hidden')) {
+            pop.classList.add('hidden');
+          } else {
+            // default: go to map (clean discovery)
+            if (currentTab !== 'map') switchTab('map');
+          }
+        }
+        
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'l') {
+          e.preventDefault();
+          switchTab(currentTab === 'map' ? 'list' : 'map');
+        }
+      });
+
+      // Make sure initial counts and map are healthy
+      setTimeout(() => {
+        applyFiltersAndRender();
+        updateFabCount();
+        console.log('%c[Gumi Cafe Map v5] Tabbed segmented control mockup ready. Clean full-screen Map ↔ List with premium feel, bidirectional sync, and fast review flow intact.', 'color:#7c3aed');
+      }, 650);
+    }
+
+    window.onload = bootMockup;
+  </script>
+</body>
+</html>

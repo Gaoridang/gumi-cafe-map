@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gumi Cafe Map — v3 Ultra Minimal Calm Light</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+
+    :root {
+      /* Ultra Minimal Calm Light — Linear / Notion inspired */
+      --bg: #fafafa;
+      --surface: #ffffff;
+      --surface-alt: #f8f8f9;
+      --text: #171717;
+      --text-secondary: #52525b;
+      --text-muted: #737373;
+      --text-tertiary: #a3a3a3;
+      --border: #f1f1f3;
+      --border-subtle: #e8e8ea;
+      --accent: #171717;           /* restrained — pure text for focus */
+      --accent-soft: #3f3f46;
+      --chip-bg: #f8f8f9;
+      --chip-active-bg: #f0f0f2;
+    }
+
+    body { 
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    
+    .heading { 
+      font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif; 
+      font-weight: 600;
+      letter-spacing: -0.025em;
+    }
+
+    /* Extreme minimalism & breathing room */
+    .cafe-card { 
+      transition: background-color 120ms ease, color 120ms ease;
+      border-radius: 12px;
+    }
+    .cafe-card:hover { 
+      background-color: #f8f8f9; 
+    }
+    .cafe-card.selected { 
+      background-color: #f4f4f5; 
+    }
+    .cafe-card .name { 
+      font-weight: 500;
+      letter-spacing: -0.01em;
+    }
+    .cafe-card.selected .name { 
+      font-weight: 600; 
+      color: #171717;
+    }
+
+    .map-container { 
+      border-radius: 16px; 
+      overflow: hidden; 
+      background: #fff;
+    }
+
+    .leaflet-container {
+      background: #f8f8f9 !important;
+    }
+
+    .leaflet-popup-content-wrapper { 
+      border-radius: 10px; 
+      box-shadow: 0 2px 8px rgb(0 0 0 / 0.06);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .star { 
+      cursor: pointer; 
+      transition: transform 80ms ease, color 80ms ease; 
+      color: #d1d5db;
+    }
+    .star:hover { transform: scale(1.1); }
+    .star.filled { color: #171717; }
+
+    /* Ultra-subtle chips — almost ghost */
+    .tag-chip { 
+      transition: all 100ms ease;
+      font-weight: 400;
+      letter-spacing: -0.005em;
+    }
+    .tag-chip:not(.active) {
+      background-color: transparent;
+      border-color: #e5e5e7;
+      color: #52525b;
+    }
+    .tag-chip:not(.active):hover {
+      background-color: #f8f8f9;
+      border-color: #d4d4d8;
+    }
+    .tag-chip.active {
+      background-color: #f0f0f2;
+      border-color: #d1d1d5;
+      color: #171717;
+      font-weight: 500;
+    }
+
+    .section-label {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      font-weight: 500;
+      color: #a3a3a3;
+      text-transform: uppercase;
+    }
+
+    .cafe-marker {
+      width: 26px; 
+      height: 26px; 
+      border-radius: 9999px;
+      display: flex; 
+      align-items: center; 
+      justify-content: center;
+      font-size: 10px; 
+      font-weight: 600; 
+      color: white;
+      box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+      border: 1.5px solid #ffffff;
+      font-feature-settings: "tnum";
+    }
+
+    .bottom-sheet {
+      transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1);
+      box-shadow: 0 -8px 20px -8px rgb(0 0 0 / 0.08);
+    }
+
+    /* Ultra clean inputs */
+    .clean-input {
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid #e5e5e7;
+      border-radius: 0;
+      padding-left: 0;
+      padding-right: 0;
+      font-size: 15px;
+      color: #171717;
+    }
+    .clean-input:focus {
+      border-bottom-color: #171717;
+      outline: none;
+      box-shadow: none;
+    }
+    .clean-input::placeholder {
+      color: #a3a3a3;
+    }
+
+    /* Generous list items */
+    .list-item {
+      padding-top: 18px;
+      padding-bottom: 18px;
+      padding-left: 24px;
+      padding-right: 24px;
+    }
+
+    /* Reduce all chrome */
+    .minimal-header {
+      border-bottom: 1px solid #f1f1f3;
+    }
+
+    .subtle-divider {
+      border-color: #f1f1f3;
+    }
+  </style>
+</head>
+<body class="bg-[#fafafa] text-[#171717]">
+  <!-- Ultra minimal top bar -->
+  <div class="bg-white border-b border-[#f1f1f3] py-2 px-6 text-[11px] font-medium tracking-[0.3px] text-[#737373] flex items-center justify-between">
+    <div class="flex items-center gap-x-2">
+      <span class="font-semibold text-[#171717]">Gumi Cafe Map</span>
+      <span class="opacity-40">•</span>
+      <span>Version 3 — Ultra Minimal Calm Light</span>
+    </div>
+    <div class="flex items-center gap-x-2 text-[10px]">
+      <button onclick="showFeedbackPrompt()" 
+              class="px-3 py-1 rounded-md hover:bg-[#f8f8f9] transition text-[#52525b]">
+        Feedback
+      </button>
+    </div>
+  </div>
+
+  <!-- Header — extremely restrained, high whitespace -->
+  <div class="max-w-[1320px] mx-auto px-8 pt-10 pb-6">
+    <div class="flex items-baseline justify-between">
+      <div>
+        <div class="flex items-center gap-x-3">
+          <div class="w-6 h-6 rounded-full bg-[#171717] flex items-center justify-center text-white text-[13px] leading-none pt-px">G</div>
+          <h1 class="heading text-[34px] tracking-[-0.035em] text-[#171717]">Gumi Cafe Map</h1>
+        </div>
+        <p class="text-[#737373] text-[15px] mt-0.5 pl-[38px]">Private memories • Gumi, South Korea</p>
+      </div>
+      
+      <div class="flex items-center gap-x-8 text-sm">
+        <div class="text-right">
+          <div class="text-[#52525b] tabular-nums">12 cafés <span class="text-[#171717] font-medium">· 8 reviewed</span></div>
+          <div class="text-[12px] text-[#a3a3a3]">Last memory 2 days ago</div>
+        </div>
+        
+        <button onclick="exportReviews()" 
+                class="flex items-center gap-x-1.5 text-[#52525b] hover:text-[#171717] transition text-sm font-medium px-3 py-2 rounded-lg hover:bg-white border border-transparent hover:border-[#f1f1f3]">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.25">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          <span>Export</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters — high whitespace, ultra-subtle -->
+  <div class="max-w-[1320px] mx-auto px-8 pb-8">
+    <div class="flex flex-col gap-y-4">
+      <!-- Search -->
+      <div class="relative max-w-md">
+        <input id="search-input" type="text" placeholder="Search cafés or notes" 
+               onkeyup="applyFilters()"
+               class="clean-input w-full pl-7 py-2 text-[15px] placeholder:text-[#a3a3a3]">
+        <svg class="w-4 h-4 absolute left-0 top-3 text-[#a3a3a3]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+      </div>
+
+      <!-- Filters row: very quiet -->
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span class="section-label mr-1">Rating</span>
+        <div class="flex gap-x-1" id="rating-filters">
+          <!-- JS populated subtle pills -->
+        </div>
+
+        <div class="h-3 w-px bg-[#f1f1f3] mx-2"></div>
+
+        <span class="section-label mr-1">Tags</span>
+        <div class="flex-1 min-w-0 flex flex-wrap gap-1.5" id="tag-filters">
+          <!-- JS populated ultra-subtle chips -->
+        </div>
+
+        <button onclick="resetFilters()" 
+                class="ml-auto text-[11px] px-3 py-1 rounded-md text-[#a3a3a3] hover:text-[#52525b] hover:bg-white transition font-medium">
+          Reset
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content — generous gap, minimal chrome -->
+  <div class="max-w-[1320px] mx-auto px-8 pb-10">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 h-[640px]">
+      
+      <!-- LIST — ultra airy -->
+      <div class="lg:col-span-5 bg-white rounded-2xl border border-[#f1f1f3] overflow-hidden flex flex-col">
+        <div class="px-6 pt-5 pb-3 flex items-center justify-between border-b border-[#f1f1f3]">
+          <div class="flex items-center gap-x-2">
+            <span class="font-semibold tracking-tight text-base">Cafés</span>
+            <span id="list-count" class="font-mono text-xs px-2 py-px bg-[#f8f8f9] text-[#52525b] rounded">12</span>
+          </div>
+          <div class="text-[11px] text-[#a3a3a3]">Tap to review</div>
+        </div>
+        
+        <div id="cafe-list" class="overflow-y-auto flex-1 divide-y divide-[#f1f1f3]">
+          <!-- Populated by JavaScript — generous list-item padding -->
+        </div>
+      </div>
+
+      <!-- MAP — calm, minimal frame -->
+      <div class="lg:col-span-7 bg-white rounded-2xl border border-[#f1f1f3] overflow-hidden flex flex-col">
+        <div class="px-6 pt-5 pb-3 flex items-center justify-between border-b border-[#f1f1f3]">
+          <div class="font-medium text-base tracking-tight">Gumi, South Korea</div>
+          <div class="text-[10px] px-2.5 py-0.5 text-[#a3a3a3]">OpenStreetMap</div>
+        </div>
+        
+        <div id="map" class="flex-1 min-h-[480px] map-container"></div>
+        
+        <div class="px-6 py-2.5 text-[10px] text-center text-[#a3a3a3] border-t border-[#f1f1f3] bg-[#fafafa]">
+          Map and list stay perfectly in sync
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Review Panel — calm, spacious, premium restraint -->
+  <div id="review-panel" 
+       class="hidden fixed lg:absolute bottom-0 left-0 right-0 lg:left-auto lg:right-8 lg:bottom-8 lg:w-[360px] bg-white border border-[#f1f1f3] rounded-t-3xl lg:rounded-3xl z-[9999]">
+    <div class="p-7">
+      <!-- Header -->
+      <div class="flex justify-between items-start mb-7">
+        <div>
+          <div id="panel-cafe-name" class="font-semibold text-[21px] tracking-[-0.02em] leading-none"></div>
+          <div id="panel-cafe-address" class="text-sm text-[#737373] mt-1.5"></div>
+        </div>
+        <button onclick="closeReviewPanel()" class="text-3xl leading-none text-[#a3a3a3] hover:text-[#171717] mt-[-2px]">×</button>
+      </div>
+
+      <!-- Stars — larger, calmer -->
+      <div class="mb-7">
+        <div class="section-label mb-2.5">How was it?</div>
+        <div id="star-rating" class="flex gap-x-2 text-5xl">
+          <!-- JS stars -->
+        </div>
+      </div>
+
+      <!-- Note -->
+      <div class="mb-6">
+        <div class="section-label mb-2">Memory (optional)</div>
+        <textarea id="review-note" rows="2" placeholder="Quiet corner, perfect oat latte..." 
+                  class="w-full border border-[#f1f1f3] focus:border-[#d1d1d5] rounded-xl p-4 text-[14px] resize-y placeholder:text-[#a3a3a3] leading-relaxed"></textarea>
+      </div>
+
+      <!-- Tags — ultra subtle -->
+      <div class="mb-7">
+        <div class="section-label mb-2.5">Tags</div>
+        <div id="panel-tags" class="flex flex-wrap gap-1.5">
+          <!-- populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Actions — minimal -->
+      <div class="flex gap-x-2">
+        <button onclick="saveReview()" 
+                class="flex-1 py-3.5 rounded-2xl bg-[#171717] hover:bg-black active:bg-[#0a0a0a] transition text-white font-medium text-[14px] tracking-[-0.01em]">
+          Save memory
+        </button>
+        <button onclick="closeReviewPanel()" 
+                class="px-6 py-3.5 rounded-2xl border border-[#f1f1f3] text-sm font-medium text-[#52525b] hover:text-[#171717] hover:bg-[#fafafa]">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Very quiet footer -->
+  <div class="max-w-[1320px] mx-auto px-8 pb-8 text-center">
+    <p class="text-[10px] text-[#a3a3a3]">
+      Ultra-minimal light. Everything works: map ↔ list sync, instant review, filters. Less is more.
+    </p>
+  </div>
+
+  <script>
+    // No Tailwind script needed beyond CDN — all custom
+
+    // Realistic Gumi cafe data (unchanged)
+    let cafes = [
+      { id: "c1", name: "Bean Story", address: "Gumi-si, near the river", lat: 36.1195, lng: 128.3447, tags: ["WiFi", "Quiet", "Power"], avgRating: 4.6 },
+      { id: "c2", name: "라떼하우스", address: "Indong-dong, Gumi", lat: 36.1123, lng: 128.3512, tags: ["Dessert", "Cozy", "WiFi"], avgRating: 4.2 },
+      { id: "c3", name: "구미 커피 로스터스", address: "Industrial complex area", lat: 36.1251, lng: 128.3389, tags: ["Power", "Work-friendly", "Great Coffee"], avgRating: 4.8 },
+      { id: "c4", name: "Quiet Corner Cafe", address: "Near Gumi Station", lat: 36.1089, lng: 128.3621, tags: ["Quiet", "View", "Cozy"], avgRating: 3.9 },
+      { id: "c5", name: "오트밀 & 라떼", address: "Seonsan-myeon", lat: 36.1344, lng: 128.3298, tags: ["Dessert", "WiFi", "Great Coffee"], avgRating: 4.5 },
+      { id: "c6", name: "The Daily Bean", address: "Gumi City Hall area", lat: 36.1158, lng: 128.3476, tags: ["Power", "Work-friendly", "Quiet"], avgRating: 4.1 },
+      { id: "c7", name: "카페 포레스트", address: "Near the park", lat: 36.1228, lng: 128.3554, tags: ["View", "Cozy", "Dessert"], avgRating: 4.7 },
+      { id: "c8", name: "Morning Roastery", address: "Wonpyeong-dong", lat: 36.1052, lng: 128.3411, tags: ["Great Coffee", "Power", "WiFi"], avgRating: 4.3 },
+      { id: "c9", name: "Hidden Table", address: "Residential street", lat: 36.1301, lng: 128.3629, tags: ["Quiet", "Cozy"], avgRating: 4.0 },
+      { id: "c10", name: "Gumi Sky Cafe", address: "High floor with view", lat: 36.1180, lng: 128.3490, tags: ["View", "Dessert", "Cozy"], avgRating: 4.9 }
+    ];
+
+    // User reviews (persisted only in this mockup session)
+    let userReviews = {
+      "c1": { rating: 5, note: "Best quiet spot for deep work. Excellent flat white.", tags: ["Quiet", "Power", "WiFi"] },
+      "c3": { rating: 5, note: "Amazing single origin pour-over. Will return.", tags: ["Great Coffee", "Power"] },
+      "c7": { rating: 4, note: "Beautiful view of the mountains. Great for dates.", tags: ["View", "Cozy"] }
+    };
+
+    let map;
+    let markers = {};
+    let selectedCafeId = null;
+    let currentFilters = { search: "", minRating: 0, tags: [] };
+
+    const ALL_TAGS = ["WiFi", "Quiet", "Power", "Dessert", "View", "Work-friendly", "Great Coffee", "Cozy"];
+
+    function initMap() {
+      map = L.map('map', { zoomControl: false }).setView([36.1195, 128.3447], 14);
+      
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '',
+        className: 'map-tiles'
+      }).addTo(map);
+
+      // Add markers — ultra minimal neutral tones
+      cafes.forEach(cafe => {
+        const rating = cafe.avgRating;
+        const color = getRatingColor(rating);
+        
+        const icon = L.divIcon({
+          className: '',
+          html: `<div class="cafe-marker" style="background:${color}; font-size:10px;">${rating.toFixed(1)}</div>`,
+          iconSize: [26, 26],
+          iconAnchor: [13, 13],
+          popupAnchor: [0, -15]
+        });
+
+        const marker = L.marker([cafe.lat, cafe.lng], { icon }).addTo(map);
+        
+        marker.on('click', () => {
+          selectCafe(cafe.id);
+        });
+        
+        markers[cafe.id] = marker;
+      });
+
+      // Initial fit
+      map.fitBounds(cafes.map(c => [c.lat, c.lng]), { padding: [28, 28] });
+    }
+
+    function getRatingColor(rating) {
+      // Very restrained neutral palette for calm feeling
+      if (rating >= 4.5) return '#171717';
+      if (rating >= 4.0) return '#3f3f46';
+      if (rating >= 3.5) return '#52525b';
+      return '#737373';
+    }
+
+    function renderList(filteredCafes) {
+      const container = document.getElementById('cafe-list');
+      container.innerHTML = '';
+      
+      const countEl = document.getElementById('list-count');
+      countEl.textContent = filteredCafes.length;
+
+      filteredCafes.forEach(cafe => {
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+        
+        const div = document.createElement('div');
+        div.className = `cafe-card mx-1 cursor-pointer flex justify-between items-start gap-4 list-item ${selectedCafeId === cafe.id ? 'selected' : ''}`;
+        
+        const tagsHTML = review && review.tags && review.tags.length 
+          ? `<div class="flex flex-wrap gap-1 mt-2.5">
+              ${review.tags.slice(0, 3).map(tag => 
+                `<span class="text-[9px] px-1.5 py-px text-[#737373] tracking-tight">${tag}</span>`
+              ).join('')}
+            </div>` 
+          : '';
+
+        const statusHTML = review 
+          ? `<div class="text-[10px] text-[#52525b] font-medium mt-1">Reviewed</div>` 
+          : `<div class="text-[10px] text-[#a3a3a3]">—</div>`;
+
+        div.innerHTML = `
+          <div class="flex-1 min-w-0">
+            <div class="name text-[15px] leading-tight tracking-[-0.01em]">${cafe.name}</div>
+            <div class="text-xs text-[#737373] mt-px truncate">${cafe.address}</div>
+            
+            <div class="flex items-center gap-x-1.5 mt-2">
+              <div class="flex text-[13px]">
+                ${Array.from({length: 5}).map((_, i) => 
+                  `<span class="${i < Math.round(rating) ? 'text-[#171717]' : 'text-[#d4d4d8]'}">★</span>`
+                ).join('')}
+              </div>
+              <span class="font-mono text-[11px] font-medium text-[#52525b] tabular-nums">${rating}</span>
+            </div>
+            
+            ${tagsHTML}
+          </div>
+          
+          <div class="text-right shrink-0">
+            ${statusHTML}
+          </div>
+        `;
+        
+        div.onclick = () => selectCafe(cafe.id);
+        container.appendChild(div);
+      });
+    }
+
+    function renderTagFilters() {
+      const container = document.getElementById('tag-filters');
+      container.innerHTML = '';
+      
+      ALL_TAGS.forEach(tag => {
+        const isActive = currentFilters.tags.includes(tag);
+        const btn = document.createElement('button');
+        btn.className = `tag-chip px-3 py-px text-[11px] border rounded-full transition whitespace-nowrap ${isActive ? 'active' : ''}`;
+        btn.textContent = tag;
+        btn.onclick = () => toggleTagFilter(tag);
+        container.appendChild(btn);
+      });
+    }
+
+    function renderRatingFilters() {
+      const container = document.getElementById('rating-filters');
+      container.innerHTML = '';
+      
+      [0, 3.5, 4.0, 4.5].forEach(rating => {
+        const isActive = currentFilters.minRating === rating;
+        const btn = document.createElement('button');
+        btn.className = `px-2.5 py-px text-xs rounded-full border transition font-medium ${isActive ? 'bg-[#f0f0f2] border-[#d1d1d5] text-[#171717]' : 'border-[#e5e5e7] bg-transparent text-[#52525b] hover:bg-[#f8f8f9]'}`;
+        btn.textContent = rating === 0 ? 'Any' : `${rating}+`;
+        btn.onclick = () => {
+          currentFilters.minRating = rating;
+          applyFilters();
+          renderRatingFilters();
+        };
+        container.appendChild(btn);
+      });
+    }
+
+    function toggleTagFilter(tag) {
+      if (currentFilters.tags.includes(tag)) {
+        currentFilters.tags = currentFilters.tags.filter(t => t !== tag);
+      } else {
+        currentFilters.tags.push(tag);
+      }
+      applyFilters();
+      renderTagFilters();
+    }
+
+    function applyFilters() {
+      const searchTerm = document.getElementById('search-input').value.toLowerCase().trim();
+      currentFilters.search = searchTerm;
+
+      const filtered = cafes.filter(cafe => {
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+        
+        const matchesSearch = !searchTerm || 
+          cafe.name.toLowerCase().includes(searchTerm) || 
+          (review && review.note && review.note.toLowerCase().includes(searchTerm));
+        
+        const matchesRating = rating >= currentFilters.minRating;
+        
+        const cafeTags = review ? review.tags : cafe.tags;
+        const matchesTags = currentFilters.tags.length === 0 || 
+          currentFilters.tags.some(t => cafeTags.includes(t));
+        
+        return matchesSearch && matchesRating && matchesTags;
+      });
+
+      renderList(filtered);
+      updateMapMarkers(filtered);
+    }
+
+    function updateMapMarkers(filteredCafes) {
+      Object.values(markers).forEach(m => m.setOpacity(0.12));
+      
+      filteredCafes.forEach(cafe => {
+        const marker = markers[cafe.id];
+        if (!marker) return;
+        
+        marker.setOpacity(1);
+        
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+        const color = getRatingColor(rating);
+        
+        const newIcon = L.divIcon({
+          className: '',
+          html: `<div class="cafe-marker" style="background:${color}; font-size:10px;">${rating.toFixed(1)}</div>`,
+          iconSize: [26, 26],
+          iconAnchor: [13, 13]
+        });
+        marker.setIcon(newIcon);
+      });
+    }
+
+    function resetFilters() {
+      currentFilters = { search: "", minRating: 0, tags: [] };
+      document.getElementById('search-input').value = '';
+      renderTagFilters();
+      renderRatingFilters();
+      applyFilters();
+    }
+
+    function selectCafe(cafeId) {
+      selectedCafeId = cafeId;
+      const cafe = cafes.find(c => c.id === cafeId);
+      if (!cafe) return;
+
+      applyFilters();
+
+      if (map && markers[cafeId]) {
+        map.flyTo([cafe.lat, cafe.lng], 16, { duration: 0.55 });
+        markers[cafeId].openPopup();
+      }
+
+      openReviewPanel(cafeId);
+    }
+
+    let currentReviewCafeId = null;
+    let currentStarRating = 0;
+
+    function openReviewPanel(cafeId) {
+      currentReviewCafeId = cafeId;
+      const cafe = cafes.find(c => c.id === cafeId);
+      const existing = userReviews[cafeId] || {};
+
+      document.getElementById('panel-cafe-name').textContent = cafe.name;
+      document.getElementById('panel-cafe-address').textContent = cafe.address;
+
+      currentStarRating = existing.rating || 4;
+      renderStars();
+
+      document.getElementById('review-note').value = existing.note || '';
+
+      renderPanelTags(cafe, existing.tags || []);
+
+      const panel = document.getElementById('review-panel');
+      panel.classList.remove('hidden');
+      panel.classList.add('lg:block');
+    }
+
+    function renderStars() {
+      const container = document.getElementById('star-rating');
+      container.innerHTML = '';
+      
+      for (let i = 1; i <= 5; i++) {
+        const star = document.createElement('span');
+        star.className = `star text-5xl ${i <= currentStarRating ? 'filled' : ''}`;
+        star.textContent = '★';
+        star.onclick = () => {
+          currentStarRating = i;
+          renderStars();
+        };
+        container.appendChild(star);
+      }
+    }
+
+    function renderPanelTags(cafe, selectedTags) {
+      const container = document.getElementById('panel-tags');
+      container.innerHTML = '';
+      
+      const allTags = [...new Set([...cafe.tags, ...ALL_TAGS])].slice(0, 8);
+      
+      allTags.forEach(tag => {
+        const isSelected = selectedTags.includes(tag);
+        const chip = document.createElement('button');
+        chip.className = `tag-chip px-3 py-px text-xs border rounded-full whitespace-nowrap ${isSelected ? 'active' : ''}`;
+        chip.textContent = tag;
+        
+        chip.onclick = () => {
+          let newTags = [...selectedTags];
+          if (newTags.includes(tag)) {
+            newTags = newTags.filter(t => t !== tag);
+          } else {
+            newTags.push(tag);
+          }
+          renderPanelTags(cafe, newTags);
+        };
+        container.appendChild(chip);
+      });
+    }
+
+    function saveReview() {
+      if (!currentReviewCafeId) return;
+      
+      const note = document.getElementById('review-note').value.trim();
+      const tagChips = document.getElementById('panel-tags').querySelectorAll('.tag-chip');
+      let tags = [];
+      
+      tagChips.forEach(chip => {
+        if (chip.classList.contains('active')) {
+          tags.push(chip.textContent);
+        }
+      });
+
+      userReviews[currentReviewCafeId] = {
+        rating: currentStarRating,
+        note: note || undefined,
+        tags: tags
+      };
+
+      closeReviewPanel();
+      applyFilters();
+      
+      const cafe = cafes.find(c => c.id === currentReviewCafeId);
+      if (cafe && markers[currentReviewCafeId]) {
+        const newColor = getRatingColor(currentStarRating);
+        const newIcon = L.divIcon({
+          className: '',
+          html: `<div class="cafe-marker" style="background:${newColor}; font-size:10px;">${currentStarRating.toFixed(1)}</div>`,
+          iconSize: [26, 26],
+          iconAnchor: [13, 13]
+        });
+        markers[currentReviewCafeId].setIcon(newIcon);
+      }
+
+      showToast(`Saved · ${cafe.name}`);
+    }
+
+    function closeReviewPanel() {
+      const panel = document.getElementById('review-panel');
+      panel.classList.add('hidden');
+      panel.classList.remove('lg:block');
+      currentReviewCafeId = null;
+    }
+
+    function showToast(message) {
+      const toast = document.createElement('div');
+      toast.className = `fixed bottom-8 left-1/2 -translate-x-1/2 bg-white text-[#171717] border border-[#f1f1f3] px-4 py-2 rounded-2xl text-sm flex items-center gap-x-2`;
+      toast.innerHTML = `<span class="text-[#52525b]">${message}</span>`;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.transition = 'all 180ms';
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 160);
+      }, 1800);
+    }
+
+    function initializeFilters() {
+      renderTagFilters();
+      renderRatingFilters();
+      
+      setTimeout(() => {
+        applyFilters();
+      }, 60);
+    }
+
+    function initializeData() {
+      if (Object.keys(userReviews).length < 5) {
+        userReviews["c2"] = { rating: 4, note: "Nice atmosphere for reading.", tags: ["Cozy", "Dessert"] };
+        userReviews["c5"] = { rating: 5, note: "Best oat milk latte in town.", tags: ["Great Coffee", "WiFi"] };
+      }
+    }
+
+    function exportReviews() {
+      const data = {
+        exportedAt: new Date().toISOString(),
+        cafes: cafes,
+        reviews: userReviews
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gumi-cafe-reviews-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function showFeedbackPrompt() {
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]';
+      modal.innerHTML = `
+        <div class="bg-white max-w-sm w-full mx-4 rounded-2xl p-6 border border-[#f1f1f3]">
+          <h3 class="font-semibold text-lg tracking-tight">How does v3 feel?</h3>
+          <p class="text-sm text-[#737373] mt-1 mb-5">Ultra-minimal calm light. High whitespace. Restrained neutrals.</p>
+          
+          <div class="space-y-1.5 text-sm">
+            <button onclick="handleFeedback('Perfect — exactly the peaceful focus I wanted')" class="w-full text-left px-4 py-3 rounded-xl border border-[#f1f1f3] hover:bg-[#fafafa]">Perfect — exactly the peaceful focus I wanted</button>
+            <button onclick="handleFeedback('Love the breathing room and typography')" class="w-full text-left px-4 py-3 rounded-xl border border-[#f1f1f3] hover:bg-[#fafafa]">Love the breathing room and typography</button>
+            <button onclick="handleFeedback('Make chips even more invisible or adjust marker size')" class="w-full text-left px-4 py-3 rounded-xl border border-[#f1f1f3] hover:bg-[#fafafa]">Make chips even more invisible or adjust marker size</button>
+            <button onclick="handleFeedback('Other (tell me in chat)')" class="w-full text-left px-4 py-3 rounded-xl border border-[#f1f1f3] hover:bg-[#fafafa]">Other (tell me in chat)</button>
+          </div>
+          
+          <button onclick="this.closest('.fixed').remove()" class="mt-5 w-full text-xs py-1.5 text-[#a3a3a3]">Close</button>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    function handleFeedback(message) {
+      const modal = document.querySelector('.fixed.inset-0');
+      if (modal) modal.remove();
+      
+      alert(`Thank you. Feedback noted:\n\n"${message}"\n\nThis direction can now inform the next iteration of the React app.`);
+    }
+
+    function initializeDataAndBoot() {
+      initializeData();
+      initMap();
+      initializeFilters();
+      
+      // Gentle default selection
+      setTimeout(() => {
+        const first = cafes[0];
+        if (first) {
+          selectedCafeId = first.id;
+          applyFilters();
+        }
+      }, 700);
+    }
+
+    // Keyboard support
+    function setupKeyboard() {
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          const panel = document.getElementById('review-panel');
+          if (!panel.classList.contains('hidden')) {
+            closeReviewPanel();
+          }
+        }
+      });
+    }
+
+    function bootMockup() {
+      initializeDataAndBoot();
+      setupKeyboard();
+      
+      console.log('%c[Gumi Cafe Map v3] Ultra Minimal Calm Light ready. High whitespace. Restrained everything.', 'color:#737373');
+    }
+
+    window.onload = bootMockup;
+  </script>
+</body>
+</html>

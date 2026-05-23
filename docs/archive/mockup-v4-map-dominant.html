@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gumi Cafe Map — v4 Map Dominant / Immersive</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Playfair+Display:wght@600&amp;display=swap');
+    
+    :root {
+      /* ElevenLabs-inspired DAY / LIGHT premium theme (clean, elegant, no warm tones) */
+      --bg: #f8f8f9;
+      --card: #ffffff;
+      --text: #111113;
+      --muted: #71717a;
+      --accent: #7c3aed;           /* ElevenLabs signature purple */
+      --accent-light: #a78bfa;
+      --border: #e4e4e7;
+      --highlight: #f4f4f5;
+    }
+    
+    html, body { height: 100%; }
+    body { font-family: 'Inter', system_ui, sans-serif; }
+    .heading { font-family: 'Playfair Display', Georgia, serif; }
+    
+    .cafe-card { transition: all 180ms cubic-bezier(0.2, 0, 0, 1); }
+    .cafe-card:hover { transform: translateY(-1px); box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08); }
+    .cafe-card.selected { border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12); background-color: #fafafa; }
+    
+    .map-container { border-radius: 0; overflow: hidden; }
+    
+    .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.2); }
+    
+    .star { cursor: pointer; transition: transform 120ms ease; }
+    .star:hover { transform: scale(1.15); }
+    .star.filled { color: #7c3aed; }
+    
+    .tag-chip { transition: all 150ms ease; }
+    .tag-chip.active { background-color: #7c3aed; color: white; border-color: #7c3aed; }
+
+    /* Better chip hierarchy on white cards (ElevenLabs-inspired light) */
+    .tag-chip:not(.active) {
+      background-color: #f1f0f5;
+      border-color: #e4e4e7;
+      color: #3f3f46;
+    }
+    .tag-chip:not(.active):hover {
+      background-color: #e4e0f0;
+      border-color: #d1d0d7;
+    }
+    
+    .section-title { font-size: 12px; letter-spacing: 0.5px; font-weight: 600; color: #71717a; }
+    
+    .cafe-marker {
+      width: 34px; height: 34px; border-radius: 9999px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: white;
+      box-shadow: 0 3px 8px rgb(0 0 0 / 0.25), 0 0 0 3px rgba(255,255,255,0.9);
+      border: 2px solid white;
+      transition: transform 200ms cubic-bezier(0.2, 0, 0, 1);
+    }
+    .cafe-marker:hover { transform: scale(1.1); }
+    
+    /* Immersive V4 styles */
+    #list-sidebar {
+      width: 320px;
+      transition: width 320ms cubic-bezier(0.32, 0.72, 0, 1), box-shadow 200ms ease;
+      box-shadow: 4px 0 16px -4px rgb(0 0 0 / 0.06);
+    }
+    #list-sidebar.collapsed {
+      width: 0 !important;
+      min-width: 0;
+      border-right: none;
+      box-shadow: none;
+      overflow: hidden;
+    }
+    
+    /* Mobile bottom sheet for list */
+    #list-sidebar.mobile-sheet {
+      position: fixed;
+      top: auto;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      width: 100% !important;
+      height: 0;
+      border-radius: 24px 24px 0 0;
+      border-right: none;
+      border-top: 1px solid #e4e4e7;
+      box-shadow: 0 -20px 40px -10px rgb(0 0 0 / 0.2);
+      z-index: 2000;
+      transition: height 360ms cubic-bezier(0.32, 0.72, 0, 1);
+      overflow: hidden;
+    }
+    #list-sidebar.mobile-sheet.open {
+      height: 52vh;
+    }
+    
+    .floating-filter {
+      background: rgba(255,255,255,0.96);
+      backdrop-filter: blur(20px);
+      box-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.12), 0 2px 4px -1px rgb(0 0 0 / 0.06);
+    }
+    
+    .map-hint {
+      font-size: 10px;
+      letter-spacing: 0.3px;
+    }
+    
+    .fab {
+      box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.25), 0 4px 8px -2px rgb(0 0 0 / 0.1);
+      transition: all 180ms cubic-bezier(0.2, 0, 0, 1);
+    }
+    .fab:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 16px 36px -12px rgb(0 0 0 / 0.25);
+    }
+    
+    #map {
+      background: #f1f0f3;
+    }
+    
+    .leaflet-control-zoom {
+      border-radius: 12px !important;
+      overflow: hidden;
+      box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.1) !important;
+    }
+    
+    .review-panel {
+      box-shadow: 0 20px 50px -12px rgb(0 0 0 / 0.25), 0 8px 16px -4px rgb(0 0 0 / 0.15);
+    }
+    
+    .compact-chip {
+      font-size: 10px;
+      padding: 2px 8px;
+    }
+  </style>
+</head>
+<body class="bg-[#f8f8f9] text-[#111113] overflow-hidden">
+  <!-- Top approval bar - ElevenLabs light premium style (v4) -->
+  <div class="bg-white border-b border-[#e4e4e7] text-[#111113] py-2 px-4 text-sm font-medium flex items-center justify-between z-50 relative">
+    <div class="flex items-center gap-x-3">
+      <span class="font-semibold tracking-tight">Design Mockup <span class="text-[#7c3aed]">v4</span></span>
+      <span class="text-[#d4d1c7]">•</span>
+      <span class="text-xs opacity-90">Map Dominant / Immersive — Light ElevenLabs day mode</span>
+      <span class="hidden md:inline text-[10px] px-2 py-0.5 rounded-full bg-[#f1f0f5] text-[#7c3aed] font-medium">65–70% map • collapsible list</span>
+    </div>
+    <div class="flex items-center gap-x-2 text-xs">
+      <button onclick="showFeedbackPrompt()" 
+              class="px-4 py-1.5 rounded-2xl bg-[#7c3aed] hover:bg-[#6d28d9] active:bg-[#5b21b6] transition font-semibold text-white text-sm">
+        👍 Approve this direction
+      </button>
+      <button onclick="showFeedbackPrompt()" 
+              class="px-4 py-1.5 rounded-2xl border border-[#e4e4e7] hover:bg-[#f4f4f5] transition text-sm">
+        Suggest changes
+      </button>
+    </div>
+  </div>
+
+  <!-- Thin elegant header (minimal chrome so map feels like the hero) -->
+  <div class="h-14 border-b border-[#e4e4e7] bg-white/95 backdrop-blur-md flex items-center px-4 z-[900] relative">
+    <div class="flex items-center gap-x-3 flex-1 min-w-0">
+      <div class="w-8 h-8 bg-[#7c3aed] rounded-2xl flex items-center justify-center text-white text-xl shadow-inner flex-shrink-0">☕</div>
+      <div class="min-w-0">
+        <span class="font-semibold tracking-tighter text-[21px] leading-none">Gumi Cafe Map</span>
+        <span class="ml-2 text-[10px] px-2.5 py-px rounded-full bg-[#f1f0f5] text-[#7c3aed] font-semibold align-middle">MAP FIRST</span>
+      </div>
+      <div class="text-xs text-[#52525b] hidden sm:block pl-1">Discover • Log • Remember</div>
+    </div>
+
+    <div class="flex items-center gap-x-3 text-sm">
+      <div class="hidden md:flex items-center gap-x-1.5 text-right text-xs pr-1">
+        <div><span class="font-semibold text-[#7c3aed]">8</span> <span class="text-[#52525b]">reviewed</span></div>
+        <div class="w-px h-3 bg-[#e4e4e7]"></div>
+        <div class="text-[#52525b]">12 total</div>
+      </div>
+
+      <button onclick="exportReviews()" 
+              class="flex items-center gap-x-1.5 px-3.5 py-1.5 rounded-2xl bg-white border border-[#e4e4e7] hover:border-[#7c3aed]/60 text-xs font-medium transition shadow-sm text-[#111113]">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.25" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        <span class="hidden sm:inline">Export</span>
+      </button>
+
+      <!-- Header list toggle (always visible) -->
+      <button onclick="toggleListSidebar()" id="header-toggle-btn"
+              class="flex items-center gap-x-2 px-4 py-1.5 rounded-2xl border border-[#e4e4e7] hover:bg-[#f4f4f5] active:bg-[#f1f0f5] text-xs font-semibold transition">
+        <span id="header-toggle-text">Hide list</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Immersive Main Area: Map is the hero -->
+  <div class="flex h-[calc(100vh-3.5rem-1.75rem)] overflow-hidden">
+    
+    <!-- Collapsible / Toggleable List Sidebar (secondary, ~30%) -->
+    <aside id="list-sidebar" 
+           class="bg-white border-r border-[#e4e4e7] flex flex-col overflow-hidden z-40 flex-shrink-0">
+      
+      <!-- Sidebar header -->
+      <div class="px-4 py-3 border-b border-[#e4e4e7] flex items-center justify-between bg-[#f8f8f9]">
+        <div class="font-semibold text-sm flex items-center gap-x-2 text-[#111113]">
+          Cafes 
+          <span id="list-count" class="text-[#7c3aed] font-mono text-xs px-1.5 py-px bg-white rounded border border-[#e4e4e7]">12</span>
+        </div>
+        <button onclick="toggleListSidebar()" 
+                class="text-[#71717a] hover:text-[#111113] text-xl leading-none w-7 h-7 flex items-center justify-center rounded-xl hover:bg-[#f1f0f5] transition">×</button>
+      </div>
+      
+      <!-- Scrollable list (same beautiful cards, slightly tighter for sidebar) -->
+      <div id="cafe-list" class="overflow-y-auto flex-1 p-2 space-y-1.5 text-sm bg-white">
+        <!-- Populated by JavaScript -->
+      </div>
+      
+      <div class="px-3 py-2 text-[10px] text-center text-[#71717a] border-t bg-[#f8f8f9]">
+        Tap a row or map marker
+      </div>
+    </aside>
+
+    <!-- MAP HERO AREA (~65-70% primary experience) -->
+    <div id="map-wrapper" class="flex-1 relative bg-[#f0f0f2]">
+      
+      <!-- The actual Leaflet map (full bleed in this container) -->
+      <div id="map" class="absolute inset-0 map-container z-10"></div>
+
+      <!-- Floating compact filter bar (top-left over map — clean & non-intrusive) -->
+      <div class="absolute top-3 left-3 z-[800] pointer-events-auto">
+        <div class="floating-filter border border-[#e4e4e7] rounded-3xl shadow-xl p-2 flex flex-col gap-y-2 min-w-[218px]">
+          
+          <!-- Prominent but slim search -->
+          <div class="relative">
+            <input id="search-input" type="text" placeholder="Search name or note..." 
+                   onkeyup="applyFilters()"
+                   class="w-full bg-white border border-[#e4e4e7] focus:border-[#7c3aed] rounded-2xl pl-9 py-2 text-sm placeholder:text-[#71717a] outline-none text-[#111113]">
+            <svg class="w-4 h-4 absolute left-3.5 top-2.5 text-[#71717a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+          </div>
+
+          <!-- Ultra-compact filters row -->
+          <div class="flex items-center gap-x-2">
+            <!-- Rating mini -->
+            <div class="flex items-center gap-x-px" id="rating-filters">
+              <!-- JS populated compact pills -->
+            </div>
+
+            <!-- Tags trigger (opens popover) -->
+            <button onclick="toggleFilterPopover()" 
+                    class="flex items-center gap-x-1 px-3 py-1 text-xs font-medium rounded-2xl border border-[#e4e4e7] hover:bg-[#f4f4f5] active:bg-[#f1f0f5] transition text-[#3f3f46]">
+              <span>Tags</span>
+              <span id="active-tag-count" class="text-[10px] px-1 py-px rounded bg-[#f1f0f5] text-[#7c3aed] font-mono min-w-[14px] text-center">0</span>
+            </button>
+
+            <button onclick="resetFilters()" 
+                    class="text-[10px] px-2.5 py-1 rounded-2xl border border-[#e4e4e7] hover:bg-[#f1f0f5] text-[#71717a] transition">Clear</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filter Popover (tags live here for cleanliness) -->
+      <div id="filter-popover" class="hidden absolute top-[92px] left-3 z-[900] bg-white border border-[#e4e4e7] rounded-3xl p-4 shadow-2xl w-72">
+        <div class="flex justify-between items-center mb-2">
+          <div class="text-xs font-semibold tracking-wider text-[#3f3f46]">FILTER BY TAGS</div>
+          <button onclick="toggleFilterPopover()" class="text-[#7c3aed] text-lg leading-none">×</button>
+        </div>
+        <div id="tag-filters" class="flex flex-wrap gap-1.5 max-h-[140px] overflow-auto pr-1">
+          <!-- Populated by renderTagFilters() -->
+        </div>
+        <div class="text-[10px] text-[#71717a] mt-3">Selection updates map &amp; list instantly.</div>
+      </div>
+
+      <!-- Floating List FAB (only meaningful when sidebar is collapsed) -->
+      <button id="fab-list-toggle" onclick="toggleListSidebar()"
+              class="fab absolute bottom-4 left-4 z-[850] hidden items-center gap-x-2 px-5 py-2.5 rounded-3xl bg-white border border-[#e4e4e7] text-sm font-semibold text-[#111113] active:scale-[0.985]">
+        <span class="text-base">📋</span>
+        <span id="fab-text">Show list</span>
+        <span id="fab-count" class="font-mono text-xs px-1.5 py-0.5 bg-[#f1f0f5] rounded text-[#7c3aed]">12</span>
+      </button>
+
+      <!-- Beautiful subtle map footer hint (map feels primary) -->
+      <div class="absolute bottom-3 right-3 z-[500] map-hint px-3 py-1 bg-white/90 backdrop-blur-md border border-[#e4e4e7] rounded-2xl text-[#52525b] pointer-events-none hidden lg:flex items-center gap-x-1.5 text-[10px]">
+        <span>Explore the map first</span>
+        <span class="text-[#7c3aed]">•</span>
+        <span>Tap any marker</span>
+      </div>
+
+      <!-- Leaflet attribution moved inside for cleanliness (subtle) -->
+      <div class="absolute bottom-1 left-1/2 -translate-x-1/2 z-[400] text-[9px] text-[#71717a]/70 pointer-events-none hidden lg:block">
+        OpenStreetMap
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Review Panel — excellent & fast flow, floats beautifully over the dominant map -->
+  <div id="review-panel" 
+       class="review-panel hidden fixed bottom-0 left-0 right-0 lg:absolute lg:bottom-4 lg:right-4 lg:left-auto lg:w-[370px] bg-white border border-[#e4e4e7] rounded-t-3xl lg:rounded-3xl shadow-2xl z-[9999]">
+    <div class="p-5">
+      <!-- Header -->
+      <div class="flex justify-between items-start mb-4">
+        <div class="min-w-0 pr-2">
+          <div id="panel-cafe-name" class="font-semibold text-[19px] tracking-tighter text-[#111113]"></div>
+          <div id="panel-cafe-address" class="text-sm text-[#52525b] truncate"></div>
+        </div>
+        <button onclick="closeReviewPanel()" class="text-3xl leading-none text-[#52525b] hover:text-[#7c3aed] transition -mt-1">×</button>
+      </div>
+
+      <!-- Stars -->
+      <div class="mb-5">
+        <div class="section-title mb-1.5">How was your visit?</div>
+        <div id="star-rating" class="flex gap-x-1 text-4xl">
+          <!-- JS stars -->
+        </div>
+      </div>
+
+      <!-- Note -->
+      <div class="mb-4">
+        <div class="section-title mb-1.5">Quick memory (optional)</div>
+        <textarea id="review-note" rows="3" placeholder="Loved the quiet corner and oat latte..." 
+                  class="w-full border border-[#e4e4e7] rounded-2xl p-3 text-sm focus:border-[#7c3aed] resize-y outline-none"></textarea>
+      </div>
+
+      <!-- Tags -->
+      <div class="mb-5">
+        <div class="section-title mb-2">Tags</div>
+        <div id="panel-tags" class="flex flex-wrap gap-1.5">
+          <!-- populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex gap-x-3">
+        <button onclick="saveReview()" 
+                class="flex-1 py-3.5 rounded-2xl bg-[#7c3aed] hover:bg-[#6d28d9] active:bg-[#5b21b6] transition text-white font-semibold text-sm tracking-wide">
+          Save memory
+        </button>
+        <button onclick="closeReviewPanel()" 
+                class="px-6 py-3.5 rounded-2xl border border-[#e4e4e7] text-sm font-medium hover:bg-[#f4f4f5] active:bg-[#f1f0f5]">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Tailwind script (no-op here but kept for parity)
+    function initializeTailwind() {
+      // CSS vars already in :root
+    }
+
+    // Realistic Gumi cafe data (identical to approved mocks)
+    let cafes = [
+      { id: "c1", name: "Bean Story", address: "Gumi-si, near the river", lat: 36.1195, lng: 128.3447, tags: ["WiFi", "Quiet", "Power"], avgRating: 4.6 },
+      { id: "c2", name: "라떼하우스", address: "Indong-dong, Gumi", lat: 36.1123, lng: 128.3512, tags: ["Dessert", "Cozy", "WiFi"], avgRating: 4.2 },
+      { id: "c3", name: "구미 커피 로스터스", address: "Industrial complex area", lat: 36.1251, lng: 128.3389, tags: ["Power", "Work-friendly", "Great Coffee"], avgRating: 4.8 },
+      { id: "c4", name: "Quiet Corner Cafe", address: "Near Gumi Station", lat: 36.1089, lng: 128.3621, tags: ["Quiet", "View", "Cozy"], avgRating: 3.9 },
+      { id: "c5", name: "오트밀 & 라떼", address: "Seonsan-myeon", lat: 36.1344, lng: 128.3298, tags: ["Dessert", "WiFi", "Great Coffee"], avgRating: 4.5 },
+      { id: "c6", name: "The Daily Bean", address: "Gumi City Hall area", lat: 36.1158, lng: 128.3476, tags: ["Power", "Work-friendly", "Quiet"], avgRating: 4.1 },
+      { id: "c7", name: "카페 포레스트", address: "Near the park", lat: 36.1228, lng: 128.3554, tags: ["View", "Cozy", "Dessert"], avgRating: 4.7 },
+      { id: "c8", name: "Morning Roastery", address: "Wonpyeong-dong", lat: 36.1052, lng: 128.3411, tags: ["Great Coffee", "Power", "WiFi"], avgRating: 4.3 },
+      { id: "c9", name: "Hidden Table", address: "Residential street", lat: 36.1301, lng: 128.3629, tags: ["Quiet", "Cozy"], avgRating: 4.0 },
+      { id: "c10", name: "Gumi Sky Cafe", address: "High floor with view", lat: 36.1180, lng: 128.3490, tags: ["View", "Dessert", "Cozy"], avgRating: 4.9 }
+    ];
+
+    // User reviews (persisted only in this mockup session)
+    let userReviews = {
+      "c1": { rating: 5, note: "Best quiet spot for deep work. Excellent flat white.", tags: ["Quiet", "Power", "WiFi"] },
+      "c3": { rating: 5, note: "Amazing single origin pour-over. Will return.", tags: ["Great Coffee", "Power"] },
+      "c7": { rating: 4, note: "Beautiful view of the mountains. Great for dates.", tags: ["View", "Cozy"] }
+    };
+
+    let map;
+    let markers = {};
+    let selectedCafeId = null;
+    let currentFilters = { search: "", minRating: 0, tags: [] };
+    let isListOpen = true;
+    let isMobile = false;
+
+    const ALL_TAGS = ["WiFi", "Quiet", "Power", "Dessert", "View", "Work-friendly", "Great Coffee", "Cozy"];
+
+    function checkMobile() {
+      isMobile = window.innerWidth < 768;
+    }
+
+    function initMap() {
+      map = L.map('map', { 
+        zoomControl: true,
+        attributionControl: false 
+      }).setView([36.1195, 128.3447], 13.8);
+      
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
+        className: 'map-tiles'
+      }).addTo(map);
+
+      // Add markers
+      cafes.forEach(cafe => {
+        const rating = userReviews[cafe.id] ? userReviews[cafe.id].rating : cafe.avgRating;
+        const color = getRatingColor(rating);
+        
+        const icon = L.divIcon({
+          className: '',
+          html: `<div class="cafe-marker" style="background:${color}; font-size:11px;">${rating.toFixed(1)}</div>`,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+          popupAnchor: [0, -20]
+        });
+
+        const marker = L.marker([cafe.lat, cafe.lng], { icon }).addTo(map);
+        
+        marker.on('click', () => {
+          selectCafe(cafe.id);
+        });
+        
+        markers[cafe.id] = marker;
+      });
+
+      // Initial beautiful fit
+      map.fitBounds(cafes.map(c => [c.lat, c.lng]), { padding: [40, 40], maxZoom: 15 });
+    }
+
+    function getRatingColor(rating) {
+      if (rating >= 4.5) return '#7c3aed';
+      if (rating >= 4.0) return '#a78bfa';
+      if (rating >= 3.5) return '#6366f1';
+      return '#4b5563';
+    }
+
+    function renderList(filteredCafes) {
+      const container = document.getElementById('cafe-list');
+      container.innerHTML = '';
+      
+      const countEl = document.getElementById('list-count');
+      countEl.textContent = filteredCafes.length;
+
+      filteredCafes.forEach(cafe => {
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+        
+        const div = document.createElement('div');
+        div.className = `cafe-card mx-1 px-4 py-3 rounded-2xl border cursor-pointer flex justify-between items-center gap-3 ${selectedCafeId === cafe.id ? 'selected border-[#7c3aed] bg-[#fafafa]' : 'border-[#e4e4e7] hover:border-[#7c3aed]/50'}`;
+        
+        div.innerHTML = `
+          <div class="flex-1 min-w-0">
+            <div class="font-medium text-[14.5px] leading-tight">${cafe.name}</div>
+            <div class="text-[11px] text-[#52525b] truncate">${cafe.address}</div>
+            
+            <div class="flex items-center gap-x-1.5 mt-1.5">
+              <div class="flex text-[#7c3aed]">
+                ${Array.from({length: 5}).map((_, i) => 
+                  `<span class="text-[13px] ${i < Math.round(rating) ? '★' : '☆'}"></span>`
+                ).join('')}
+              </div>
+              <span class="font-mono text-xs font-semibold text-[#3f3f46]">${rating}</span>
+            </div>
+            
+            ${review && review.tags && review.tags.length ? `
+              <div class="flex flex-wrap gap-px mt-1.5">
+                ${review.tags.slice(0, 2).map(tag => 
+                  `<span class="text-[9px] px-1.5 py-px rounded bg-[#f1f0f5] text-[#3f3f46]">${tag}</span>`
+                ).join('')}
+              </div>` : ''}
+          </div>
+          
+          <div class="text-right flex-shrink-0">
+            ${review ? 
+              `<div class="text-emerald-600 text-[10px] font-semibold">Reviewed</div>` : 
+              `<div class="text-[#71717a] text-[10px]">Not yet</div>`}
+          </div>
+        `;
+        
+        div.onclick = () => selectCafe(cafe.id);
+        container.appendChild(div);
+      });
+    }
+
+    function renderTagFilters() {
+      const container = document.getElementById('tag-filters');
+      if (!container) return;
+      container.innerHTML = '';
+      
+      ALL_TAGS.forEach(tag => {
+        const isActive = currentFilters.tags.includes(tag);
+        const btn = document.createElement('button');
+        btn.className = `tag-chip px-3 py-1 rounded-2xl text-xs border transition whitespace-nowrap ${isActive ? 'active bg-[#7c3aed] text-white border-[#7c3aed]' : 'border-[#e4e4e7] text-[#3f3f46]'}`;
+        btn.textContent = tag;
+        btn.onclick = () => toggleTagFilter(tag);
+        container.appendChild(btn);
+      });
+      updateActiveTagCount();
+    }
+
+    function updateActiveTagCount() {
+      const el = document.getElementById('active-tag-count');
+      if (el) el.textContent = currentFilters.tags.length;
+    }
+
+    function renderRatingFilters() {
+      const container = document.getElementById('rating-filters');
+      if (!container) return;
+      container.innerHTML = '';
+      
+      [0, 3.5, 4.0, 4.5].forEach(rating => {
+        const btn = document.createElement('button');
+        const active = currentFilters.minRating === rating;
+        btn.className = `compact-chip px-2.5 py-0.5 text-xs rounded-2xl border transition font-medium ${active ? 'bg-[#7c3aed] text-white border-[#7c3aed]' : 'border-[#e4e4e7] bg-white hover:bg-[#f4f4f5] text-[#3f3f46]'}`;
+        btn.textContent = rating === 0 ? 'Any' : `${rating}+`;
+        btn.onclick = () => {
+          currentFilters.minRating = rating;
+          applyFilters();
+          renderRatingFilters();
+        };
+        container.appendChild(btn);
+      });
+    }
+
+    function toggleTagFilter(tag) {
+      if (currentFilters.tags.includes(tag)) {
+        currentFilters.tags = currentFilters.tags.filter(t => t !== tag);
+      } else {
+        currentFilters.tags.push(tag);
+      }
+      applyFilters();
+      renderTagFilters();
+    }
+
+    function applyFilters() {
+      const searchTerm = document.getElementById('search-input').value.toLowerCase().trim();
+      currentFilters.search = searchTerm;
+
+      const filtered = cafes.filter(cafe => {
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+        
+        const matchesSearch = !searchTerm || 
+          cafe.name.toLowerCase().includes(searchTerm) || 
+          (review && review.note && review.note.toLowerCase().includes(searchTerm));
+        
+        const matchesRating = rating >= currentFilters.minRating;
+        
+        const cafeTags = review ? review.tags : cafe.tags;
+        const matchesTags = currentFilters.tags.length === 0 || 
+          currentFilters.tags.some(t => cafeTags.includes(t));
+        
+        return matchesSearch && matchesRating && matchesTags;
+      });
+
+      renderList(filtered);
+      updateMapMarkers(filtered);
+      updateActiveTagCount();
+    }
+
+    function updateMapMarkers(filteredCafes) {
+      Object.values(markers).forEach(m => m.setOpacity(0.18));
+      
+      filteredCafes.forEach(cafe => {
+        const marker = markers[cafe.id];
+        if (!marker) return;
+        
+        marker.setOpacity(1);
+        
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+        const color = getRatingColor(rating);
+        
+        const newIcon = L.divIcon({
+          className: '',
+          html: `<div class="cafe-marker" style="background:${color}; font-size:11px;">${rating.toFixed(1)}</div>`,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17]
+        });
+        marker.setIcon(newIcon);
+      });
+    }
+
+    function resetFilters() {
+      currentFilters = { search: "", minRating: 0, tags: [] };
+      document.getElementById('search-input').value = '';
+      renderTagFilters();
+      renderRatingFilters();
+      applyFilters();
+    }
+
+    function selectCafe(cafeId) {
+      selectedCafeId = cafeId;
+      const cafe = cafes.find(c => c.id === cafeId);
+      if (!cafe) return;
+
+      // Update list selection (works even if sidebar collapsed)
+      applyFilters();
+
+      // Fly map to location (hero interaction)
+      if (map && markers[cafeId]) {
+        map.flyTo([cafe.lat, cafe.lng], 16.5, { duration: 0.65 });
+        markers[cafeId].openPopup();
+      }
+
+      // Open the excellent fast review flow
+      openReviewPanel(cafeId);
+    }
+
+    let currentReviewCafeId = null;
+    let currentStarRating = 0;
+
+    function openReviewPanel(cafeId) {
+      currentReviewCafeId = cafeId;
+      const cafe = cafes.find(c => c.id === cafeId);
+      const existing = userReviews[cafeId] || {};
+
+      document.getElementById('panel-cafe-name').textContent = cafe.name;
+      document.getElementById('panel-cafe-address').textContent = cafe.address;
+
+      currentStarRating = existing.rating || 4;
+      renderStars();
+
+      document.getElementById('review-note').value = existing.note || '';
+
+      renderPanelTags(cafe, existing.tags || []);
+
+      const panel = document.getElementById('review-panel');
+      panel.classList.remove('hidden');
+      panel.classList.add('lg:block');
+    }
+
+    function renderStars() {
+      const container = document.getElementById('star-rating');
+      container.innerHTML = '';
+      
+      for (let i = 1; i <= 5; i++) {
+        const star = document.createElement('span');
+        star.className = `star text-4xl ${i <= currentStarRating ? 'filled' : 'text-[#d4d4d8]'}`;
+        star.textContent = '★';
+        star.onclick = () => {
+          currentStarRating = i;
+          renderStars();
+        };
+        container.appendChild(star);
+      }
+    }
+
+    function renderPanelTags(cafe, selectedTags) {
+      const container = document.getElementById('panel-tags');
+      container.innerHTML = '';
+      
+      const allTags = [...new Set([...cafe.tags, ...ALL_TAGS])].slice(0, 8);
+      
+      allTags.forEach(tag => {
+        const isSelected = selectedTags.includes(tag);
+        const chip = document.createElement('button');
+        chip.className = `tag-chip px-3 py-1 text-xs border rounded-2xl whitespace-nowrap ${isSelected ? 'active bg-[#7c3aed] text-white border-[#7c3aed]' : 'border-[#e4e4e7] text-[#3f3f46]'}`;
+        chip.textContent = tag;
+        
+        chip.onclick = () => {
+          let newTags = [...selectedTags];
+          if (newTags.includes(tag)) {
+            newTags = newTags.filter(t => t !== tag);
+          } else {
+            newTags.push(tag);
+          }
+          renderPanelTags(cafe, newTags);
+        };
+        container.appendChild(chip);
+      });
+    }
+
+    function saveReview() {
+      if (!currentReviewCafeId) return;
+      
+      const note = document.getElementById('review-note').value.trim();
+      const tagChips = document.getElementById('panel-tags').querySelectorAll('.tag-chip');
+      let tags = [];
+      
+      tagChips.forEach(chip => {
+        if (chip.classList.contains('active')) {
+          tags.push(chip.textContent);
+        }
+      });
+
+      userReviews[currentReviewCafeId] = {
+        rating: currentStarRating,
+        note: note || undefined,
+        tags: tags
+      };
+
+      closeReviewPanel();
+
+      applyFilters();
+      
+      // Update marker live
+      const cafe = cafes.find(c => c.id === currentReviewCafeId);
+      if (cafe && markers[currentReviewCafeId]) {
+        const newColor = getRatingColor(currentStarRating);
+        const newIcon = L.divIcon({
+          className: '',
+          html: `<div class="cafe-marker" style="background:${newColor}; font-size:11px;">${currentStarRating.toFixed(1)}</div>`,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17]
+        });
+        markers[currentReviewCafeId].setIcon(newIcon);
+      }
+
+      showToast(`Saved for ${cafe.name} ★`);
+    }
+
+    function closeReviewPanel() {
+      const panel = document.getElementById('review-panel');
+      panel.classList.add('hidden');
+      panel.classList.remove('lg:block');
+      currentReviewCafeId = null;
+    }
+
+    function showToast(message) {
+      const toast = document.createElement('div');
+      toast.className = `fixed bottom-5 left-1/2 -translate-x-1/2 bg-white text-[#111113] border border-[#e4e4e7] px-5 py-2.5 rounded-3xl text-sm shadow-xl flex items-center gap-x-2 z-[99999]`;
+      toast.innerHTML = `<span>${message}</span>`;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.transition = 'all 220ms';
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 180);
+      }, 2100);
+    }
+
+    function updateFabAndHeader() {
+      const fab = document.getElementById('fab-list-toggle');
+      const headerBtnText = document.getElementById('header-toggle-text');
+      const fabText = document.getElementById('fab-text');
+      const fabCount = document.getElementById('fab-count');
+      const count = cafes.length;
+
+      const sidebar = document.getElementById('list-sidebar');
+      const currentlyOpen = !sidebar.classList.contains('collapsed') && !sidebar.classList.contains('mobile-sheet') || 
+                            (sidebar.classList.contains('mobile-sheet') && sidebar.classList.contains('open'));
+
+      if (currentlyOpen) {
+        // list visible
+        if (fab) fab.classList.add('hidden');
+        if (headerBtnText) headerBtnText.textContent = 'Hide list';
+      } else {
+        // collapsed
+        if (fab) {
+          fab.classList.remove('hidden');
+          fab.classList.add('flex');
+        }
+        if (headerBtnText) headerBtnText.textContent = 'Show list';
+        if (fabText) fabText.textContent = 'Show list';
+        if (fabCount) fabCount.textContent = count;
+      }
+      updateActiveTagCount();
+    }
+
+    function toggleListSidebar() {
+      const sidebar = document.getElementById('list-sidebar');
+      const wrapper = document.getElementById('map-wrapper');
+
+      checkMobile();
+
+      if (isMobile) {
+        // Mobile: bottom sheet behavior
+        sidebar.classList.add('mobile-sheet');
+        sidebar.classList.remove('collapsed');
+
+        if (sidebar.classList.contains('open')) {
+          sidebar.classList.remove('open');
+          setTimeout(() => {
+            sidebar.style.height = '0';
+          }, 10);
+        } else {
+          sidebar.style.height = '0';
+          sidebar.classList.add('open');
+          // force height via class
+        }
+        isListOpen = sidebar.classList.contains('open');
+      } else {
+        // Desktop: width collapse
+        sidebar.classList.remove('mobile-sheet');
+        
+        if (sidebar.classList.contains('collapsed')) {
+          sidebar.classList.remove('collapsed');
+          isListOpen = true;
+        } else {
+          sidebar.classList.add('collapsed');
+          isListOpen = false;
+        }
+      }
+
+      // Invalidate Leaflet size after animation so map stays beautiful & responsive
+      setTimeout(() => {
+        if (map) {
+          map.invalidateSize({ animate: true, duration: 200 });
+        }
+      }, 340);
+
+      updateFabAndHeader();
+    }
+
+    function toggleFilterPopover() {
+      const pop = document.getElementById('filter-popover');
+      pop.classList.toggle('hidden');
+    }
+
+    function initializeFilters() {
+      // Rating chips live in the floating bar (compact)
+      renderRatingFilters();
+      
+      // Tags live in the popover (clean, not cluttering the hero map)
+      renderTagFilters();
+      
+      // Initial filter pass
+      setTimeout(() => {
+        applyFilters();
+      }, 80);
+    }
+
+    function initializeData() {
+      if (Object.keys(userReviews).length < 5) {
+        userReviews["c2"] = { rating: 4, note: "Nice atmosphere for reading.", tags: ["Cozy", "Dessert"] };
+        userReviews["c5"] = { rating: 5, note: "Best oat milk latte in town.", tags: ["Great Coffee", "WiFi"] };
+        userReviews["c8"] = { rating: 4, note: "Solid pour over and great outlets.", tags: ["Power", "Great Coffee"] };
+      }
+    }
+
+    function exportReviews() {
+      const data = {
+        exportedAt: new Date().toISOString(),
+        cafes: cafes,
+        reviews: userReviews,
+        mode: "v4-map-dominant"
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gumi-cafe-reviews-v4-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function showFeedbackPrompt() {
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[99999]';
+      modal.innerHTML = `
+        <div class="bg-white max-w-md w-full mx-4 rounded-3xl p-6 shadow-2xl">
+          <h3 class="font-semibold text-xl tracking-tight mb-1">Map-dominant v4 feedback</h3>
+          <p class="text-sm text-[#3f3f46] mb-5">This explores the “beautiful map first, list as supporting context” direction with collapsible sidebar + floating filters. All core flows remain instant.</p>
+          
+          <div class="space-y-2 text-sm">
+            <button onclick="handleFeedback('Perfect — map feels like the hero. Ready for React.')" class="w-full text-left px-4 py-3 rounded-2xl border hover:bg-[#f1f0f5]">✅ Perfect — map feels like the hero. Ready for React.</button>
+            <button onclick="handleFeedback('Love it. Maybe make the floating filter bar even more minimal.')" class="w-full text-left px-4 py-3 rounded-2xl border hover:bg-[#f1f0f5]">✨ Love it. Maybe make the floating filter bar even more minimal.</button>
+            <button onclick="handleFeedback('Great for discovery. On mobile the bottom sheet feels native.')" class="w-full text-left px-4 py-3 rounded-2xl border hover:bg-[#f1f0f5]">📱 Great for discovery. On mobile the bottom sheet feels native.</button>
+            <button onclick="handleFeedback('Other (describe in chat)')" class="w-full text-left px-4 py-3 rounded-2xl border hover:bg-[#f1f0f5]">💬 Other feedback</button>
+          </div>
+          
+          <button onclick="this.closest('.fixed').remove()" class="mt-5 w-full text-xs py-2 text-[#71717a]">Close</button>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    function handleFeedback(message) {
+      const modal = document.querySelector('.fixed.inset-0');
+      if (modal) modal.remove();
+      
+      alert(`Thank you! Feedback noted:\n\n"${message}"\n\nThis will inform the final React implementation of the map-dominant experience.`);
+    }
+
+    function updateResponsiveOnResize() {
+      checkMobile();
+      const sidebar = document.getElementById('list-sidebar');
+      
+      if (isMobile) {
+        // Ensure proper mobile classes if needed
+        if (!sidebar.classList.contains('mobile-sheet') && !sidebar.classList.contains('collapsed')) {
+          // If it was desktop open, collapse it on resize to mobile for better default map dominance
+          sidebar.classList.add('collapsed');
+        }
+      } else {
+        sidebar.classList.remove('mobile-sheet');
+        if (sidebar.style.height) sidebar.style.height = '';
+      }
+      updateFabAndHeader();
+    }
+
+    // Boot everything for v4
+    function bootMockup() {
+      initializeTailwind();
+      initializeData();
+      initMap();
+      initializeFilters();
+      
+      checkMobile();
+      
+      const sidebar = document.getElementById('list-sidebar');
+      
+      // V4 default: map-dominant. On wide screens start with list open (~30% sidebar / 70% map). On mobile start collapsed.
+      if (isMobile) {
+        sidebar.classList.add('mobile-sheet', 'collapsed');
+        isListOpen = false;
+      } else {
+        // desktop: open by default to demonstrate the approved split but map still clearly dominant
+        sidebar.classList.remove('collapsed');
+        isListOpen = true;
+      }
+      
+      updateFabAndHeader();
+      
+      // Gentle initial view — no forced selection so user discovers via map
+      setTimeout(() => {
+        if (map) {
+          map.invalidateSize();
+          // subtle pan to center the densest area
+          map.panTo([36.118, 128.348], { animate: false });
+        }
+      }, 420);
+
+      // Keyboard support (Esc closes review or popover)
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          const panel = document.getElementById('review-panel');
+          const pop = document.getElementById('filter-popover');
+          if (!panel.classList.contains('hidden')) {
+            closeReviewPanel();
+          } else if (!pop.classList.contains('hidden')) {
+            pop.classList.add('hidden');
+          } else {
+            // collapse list if open (map first priority)
+            const sb = document.getElementById('list-sidebar');
+            if (!sb.classList.contains('collapsed') && !sb.classList.contains('mobile-sheet')) {
+              sb.classList.add('collapsed');
+              isListOpen = false;
+              updateFabAndHeader();
+              setTimeout(() => map && map.invalidateSize(), 320);
+            }
+          }
+        }
+        
+        if (e.key.toLowerCase() === 'l' && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          toggleListSidebar();
+        }
+      });
+
+      // Responsive handler
+      window.addEventListener('resize', () => {
+        updateResponsiveOnResize();
+        if (map) map.invalidateSize();
+      });
+
+      // Make sure FAB state is correct initially
+      setTimeout(updateFabAndHeader, 600);
+
+      console.log('%c[Gumi Cafe Map v4] Map-dominant immersive mockup ready. Map is the hero. List is beautiful supporting context. All flows (map↔list sync + fast review) preserved.', 'color:#6f5339');
+    }
+
+    window.onload = bootMockup;
+  </script>
+</body>
+</html>

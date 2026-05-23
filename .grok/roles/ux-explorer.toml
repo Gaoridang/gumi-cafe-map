@@ -1,0 +1,8 @@
+# Dedicated UX Explorer role for Gumi Cafe Map
+# Read-only, high-reasoning researcher specialized for personal map apps, calm UX, React + Leaflet patterns
+
+description = "Read-only explorer optimized for UX research on cafe/personal map UIs, competitor analysis, Leaflet/React integration, accessibility for interactive maps, and minimal/calm interface best practices"
+
+default_capability_mode = "read-only"
+reasoning_effort = "high"
+default_fork_context = true

@@ -1,0 +1,1235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Gumi Cafe Map — v6 Persistent Bottom Sheet + Map Dominant</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Playfair+Display:wght@600&amp;display=swap');
+    
+    :root {
+      /* ElevenLabs-inspired DAY / LIGHT premium theme (clean, elegant, no warm tones) */
+      --bg: #f8f8f9;
+      --card: #ffffff;
+      --text: #111113;
+      --muted: #71717a;
+      --accent: #7c3aed;           /* ElevenLabs signature purple */
+      --accent-light: #a78bfa;
+      --border: #e4e4e7;
+      --highlight: #f4f4f5;
+    }
+    
+    html, body { height: 100%; }
+    body { font-family: 'Inter', system_ui, sans-serif; }
+    .heading { font-family: 'Playfair Display', Georgia, serif; }
+    
+    .cafe-card, .sheet-cafe-card { transition: all 160ms cubic-bezier(0.2, 0, 0, 1); }
+    .sheet-cafe-card:hover { transform: translateY(-1px); box-shadow: 0 8px 16px -4px rgb(0 0 0 / 0.08); }
+    .sheet-cafe-card.selected { border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12); background-color: #fafafa; }
+    
+    .map-container { border-radius: 0; overflow: hidden; }
+    
+    .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.2); }
+    
+    .star { cursor: pointer; transition: transform 120ms ease; user-select: none; }
+    .star:hover { transform: scale(1.2); }
+    .star.filled { color: #7c3aed; }
+    
+    .tag-chip { 
+      transition: all 140ms ease; 
+      font-weight: 500;
+      border: 1px solid #e4e4e7;
+    }
+    .tag-chip.active { 
+      background-color: #7c3aed; 
+      color: white; 
+      border-color: #7c3aed; 
+    }
+    .tag-chip:not(.active) {
+      background-color: #f1f0f5;
+      color: #3f3f46;
+    }
+    .tag-chip:not(.active):hover {
+      background-color: #e4e0f0;
+      border-color: #d1d0d7;
+    }
+    
+    .section-title { font-size: 11px; letter-spacing: 0.6px; font-weight: 600; color: #71717a; text-transform: uppercase; }
+    
+    .cafe-marker {
+      width: 34px; height: 34px; border-radius: 9999px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: white;
+      box-shadow: 0 3px 8px rgb(0 0 0 / 0.22), 0 0 0 3px rgba(255,255,255,0.95);
+      border: 2px solid white;
+      transition: transform 180ms cubic-bezier(0.2, 0, 0, 1), box-shadow 180ms ease;
+    }
+    .cafe-marker:hover { transform: scale(1.12); }
+    .cafe-marker.selected {
+      box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.35), 0 4px 12px rgb(0 0 0 / 0.3);
+      transform: scale(1.18);
+    }
+    
+    .floating-fab {
+      box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.2), 0 4px 8px -2px rgb(0 0 0 / 0.1);
+      transition: all 180ms cubic-bezier(0.2, 0, 0, 1);
+    }
+    .floating-fab:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 16px 36px -12px rgb(0 0 0 / 0.25);
+    }
+    
+    #map {
+      background: #f0eff3;
+    }
+    
+    .leaflet-control-zoom {
+      border-radius: 12px !important;
+      overflow: hidden;
+      box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.1) !important;
+      border: 1px solid #e4e4e7 !important;
+    }
+    
+    /* === V6 Persistent Bottom Sheet (native map-app feel) === */
+    #bottom-sheet {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #ffffff;
+      border-top: 1px solid #e4e4e7;
+      border-radius: 24px 24px 0 0;
+      box-shadow: 0 -12px 32px -10px rgb(0 0 0 / 0.18), 0 -2px 8px -2px rgb(0 0 0 / 0.06);
+      z-index: 2100;
+      overflow: hidden;
+      transition: height 320ms cubic-bezier(0.32, 0.72, 0, 1);
+      /* will be controlled by JS for drag */
+    }
+    
+    .sheet-handle {
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+    }
+    .sheet-handle:active { cursor: grabbing; }
+    .handle-bar {
+      width: 42px;
+      height: 5px;
+      background: #e4e4e7;
+      border-radius: 999px;
+      transition: width 160ms ease, background 160ms ease;
+    }
+    .sheet-handle:hover .handle-bar,
+    .sheet-handle:active .handle-bar {
+      width: 56px;
+      background: #d1d0d7;
+    }
+    
+    .sheet-header {
+      padding: 0 16px 12px;
+    }
+    
+    .peek-summary {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scroll-snap-type: x proximity;
+      padding-bottom: 8px;
+    }
+    .peek-pill {
+      flex-shrink: 0;
+      background: #fff;
+      border: 1px solid #e4e4e7;
+      border-radius: 9999px;
+      padding: 6px 12px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+      transition: all 140ms ease;
+      scroll-snap-align: start;
+    }
+    .peek-pill:active {
+      background: #f4f4f5;
+      transform: scale(0.985);
+    }
+    
+    .vertical-list {
+      -webkit-overflow-scrolling: touch;
+    }
+    
+    .sheet-cafe-card {
+      background: #fff;
+      border: 1px solid #e4e4e7;
+      border-radius: 18px;
+      padding: 10px 14px;
+      margin: 4px 0;
+      cursor: pointer;
+    }
+    .sheet-cafe-card:active {
+      background: #f8f8f9;
+      border-color: #d4d1c7;
+    }
+    
+    /* Review sheet (stacks over list sheet) */
+    #review-sheet {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #ffffff;
+      border-top: 1px solid #e4e4e7;
+      border-radius: 24px 24px 0 0;
+      box-shadow: 0 -20px 50px -12px rgb(0 0 0 / 0.28), 0 -8px 20px -6px rgb(0 0 0 / 0.12);
+      z-index: 3200;
+      overflow: hidden;
+      transition: transform 340ms cubic-bezier(0.32, 0.72, 0, 1);
+      transform: translateY(120%);
+    }
+    #review-sheet.open {
+      transform: translateY(0);
+    }
+    
+    .review-star {
+      font-size: 38px;
+      line-height: 1;
+      padding: 4px;
+    }
+    
+    /* Toast */
+    .toast {
+      animation: toast-in 180ms cubic-bezier(0.2, 0, 0, 1) forwards;
+    }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .compact-chip {
+      font-size: 11px;
+      padding: 3px 10px;
+      font-weight: 600;
+      letter-spacing: -.2px;
+    }
+    
+    .map-hint {
+      font-size: 10px;
+      letter-spacing: 0.4px;
+    }
+    
+    /* Leaflet attribution subtle */
+    .leaflet-control-attribution {
+      font-size: 9px !important;
+      background: rgba(255,255,255,0.85) !important;
+      padding: 1px 5px !important;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="bg-[#f8f8f9] text-[#111113] overflow-hidden">
+  <!-- Top approval bar -->
+  <div class="bg-white border-b border-[#e4e4e7] text-[#111113] py-2 px-4 text-sm font-medium flex items-center justify-between z-[9999] relative">
+    <div class="flex items-center gap-x-3">
+      <span class="font-semibold tracking-tight">Design Mockup <span class="text-[#7c3aed]">v6</span></span>
+      <span class="text-[#d4d1c7]">•</span>
+      <span class="text-xs opacity-90">Persistent Bottom Sheet + Map Dominant — Light ElevenLabs day mode</span>
+      <span class="hidden md:inline text-[10px] px-2 py-0.5 rounded-full bg-[#f1f0f5] text-[#7c3aed] font-medium">Map-first • Native sheet UX</span>
+    </div>
+    <div class="flex items-center gap-x-2 text-xs">
+      <button onclick="showFeedbackPrompt()" 
+              class="px-4 py-1.5 rounded-2xl bg-[#7c3aed] hover:bg-[#6d28d9] active:bg-[#5b21b6] transition font-semibold text-white text-sm">
+        👍 Approve this direction
+      </button>
+      <button onclick="showFeedbackPrompt()" 
+              class="px-4 py-1.5 rounded-2xl border border-[#e4e4e7] hover:bg-[#f4f4f5] transition text-sm">
+        Suggest changes
+      </button>
+    </div>
+  </div>
+
+  <!-- Thin elegant header (map is the star) -->
+  <div class="h-14 border-b border-[#e4e4e7] bg-white/95 backdrop-blur-md flex items-center px-4 z-[900] relative">
+    <div class="flex items-center gap-x-3 flex-1 min-w-0">
+      <div class="w-8 h-8 bg-[#7c3aed] rounded-2xl flex items-center justify-center text-white text-xl shadow-inner flex-shrink-0">☕</div>
+      <div class="min-w-0">
+        <span class="font-semibold tracking-tighter text-[21px] leading-none">Gumi Cafe Map</span>
+        <span class="ml-2 text-[10px] px-2.5 py-px rounded-full bg-[#f1f0f5] text-[#7c3aed] font-semibold align-middle">v6 SHEET</span>
+      </div>
+      <div class="text-xs text-[#52525b] hidden sm:block pl-1">Map first • Remember fast</div>
+    </div>
+
+    <div class="flex items-center gap-x-3 text-sm">
+      <div class="hidden md:flex items-center gap-x-1.5 text-right text-xs pr-1">
+        <div><span class="font-semibold text-[#7c3aed]">8</span> <span class="text-[#52525b]">reviewed</span></div>
+        <div class="w-px h-3 bg-[#e4e4e7]"></div>
+        <div class="text-[#52525b]">12 total</div>
+      </div>
+
+      <button onclick="exportReviews()" 
+              class="flex items-center gap-x-1.5 px-3.5 py-1.5 rounded-2xl bg-white border border-[#e4e4e7] hover:border-[#7c3aed]/60 text-xs font-medium transition shadow-sm text-[#111113]">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.25" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        <span class="hidden sm:inline">Export</span>
+      </button>
+
+      <button onclick="centerOnAllCafes()" 
+              class="flex items-center gap-x-1.5 px-3 py-1.5 rounded-2xl border border-[#e4e4e7] hover:bg-[#f4f4f5] text-xs font-medium transition text-[#111113]">
+        Center
+      </button>
+    </div>
+  </div>
+
+  <!-- Full-bleed Map Container -->
+  <div id="map-wrapper" class="relative" style="height: calc(100vh - 96px);">
+    <div id="map" class="absolute inset-0 z-[10]"></div>
+
+    <!-- Floating locate / hint controls over map (top right) -->
+    <div class="absolute top-3 right-3 z-[850] flex flex-col gap-y-2">
+      <button onclick="simulateLocateMe()" 
+              class="floating-fab w-10 h-10 bg-white border border-[#e4e4e7] rounded-2xl flex items-center justify-center text-[#52525b] hover:text-[#7c3aed] active:bg-[#f4f4f5] shadow-lg"
+              title="Locate me">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314-11.314z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      </button>
+      <div class="map-hint px-2.5 py-1 bg-white/90 backdrop-blur border border-[#e4e4e7] rounded-2xl text-[#52525b] pointer-events-none hidden lg:flex items-center gap-x-1 text-[10px]">
+        Drag map • Tap markers
+      </div>
+    </div>
+
+    <!-- Subtle attribution -->
+    <div class="absolute bottom-2 left-3 z-[400] text-[9px] text-[#71717a]/70 pointer-events-none hidden lg:block bg-white/70 px-1.5 rounded">
+      © OpenStreetMap
+    </div>
+  </div>
+
+  <!-- ========== PERSISTENT BOTTOM SHEET (LIST) ========== -->
+  <div id="bottom-sheet" style="height: 128px;">
+    <!-- Drag handle -->
+    <div id="sheet-handle" class="sheet-handle">
+      <div class="handle-bar"></div>
+    </div>
+
+    <!-- Header (always visible) -->
+    <div class="sheet-header">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-x-2">
+          <span class="font-semibold text-[15px] tracking-[-0.2px]">Cafés</span>
+          <span id="sheet-count" 
+                class="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 text-xs font-mono font-semibold bg-[#f1f0f5] text-[#7c3aed] rounded-full border border-[#e4e4e7]">12</span>
+          <button id="reset-filters-btn"
+                  onclick="resetFilters()"
+                  class="hidden text-[10px] px-2 py-0.5 rounded-full bg-[#f4f4f5] text-[#7c3aed] hover:bg-[#e4e0f0] font-medium transition">
+            Reset
+          </button>
+        </div>
+        <div onclick="toggleSheet()" class="text-[11px] text-[#7c3aed] font-medium cursor-pointer select-none px-2 py-0.5 hover:bg-[#f1f0f5] rounded-xl transition">
+          <span id="sheet-state-label">Pull up</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- PEEK SUMMARY (horizontal pills) -->
+    <div id="peek-summary" class="peek-summary px-4">
+      <!-- Populated by JS -->
+    </div>
+
+    <!-- EXPANDED CONTENT (filters + vertical list) -->
+    <div id="expanded-content" class="hidden px-4 pb-4 flex flex-col" style="max-height: calc(100% - 64px);">
+      <!-- Filters -->
+      <div class="mb-2">
+        <!-- Search -->
+        <div class="relative mb-2.5">
+          <input id="sheet-search-input" type="text" placeholder="Search cafés or notes..." 
+                 oninput="applyFilters()"
+                 class="w-full bg-[#f8f8f9] border border-[#e4e4e7] focus:border-[#7c3aed] rounded-2xl pl-9 py-2 text-sm placeholder:text-[#71717a] outline-none text-[#111113]">
+          <svg class="w-4 h-4 absolute left-3.5 top-[9px] text-[#71717a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.25" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+          </svg>
+        </div>
+
+        <!-- Rating filters -->
+        <div class="flex items-center gap-x-1.5 mb-2" id="sheet-rating-filters">
+          <!-- JS populated -->
+        </div>
+
+        <!-- Tag filters (horizontal scroll) -->
+        <div class="flex items-center gap-x-1.5 overflow-x-auto pb-1 -mx-0.5" id="sheet-tag-filters" style="scrollbar-width: none;">
+          <!-- JS populated tag chips -->
+        </div>
+      </div>
+
+      <!-- Vertical scrollable list -->
+      <div id="sheet-vertical-list" class="vertical-list flex-1 overflow-y-auto space-y-1 pr-1 text-sm" style="max-height: 100%;">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== REVIEW SHEET (slides over list sheet) ========== -->
+  <div id="review-sheet">
+    <div class="p-5 pb-6" style="max-height: 68vh; overflow-y: auto;">
+      <!-- Header -->
+      <div class="flex justify-between items-start mb-4">
+        <div class="min-w-0 pr-3 flex-1">
+          <div id="review-cafe-name" class="font-semibold text-[20px] tracking-tighter text-[#111113]"></div>
+          <div id="review-cafe-address" class="text-sm text-[#52525b] mt-px"></div>
+        </div>
+        <button onclick="closeReviewSheet()" class="text-4xl leading-none text-[#52525b] hover:text-[#7c3aed] transition -mt-2 -mr-1">×</button>
+      </div>
+
+      <!-- Stars -->
+      <div class="mb-5">
+        <div class="section-title mb-2">How was your visit?</div>
+        <div id="review-star-rating" class="flex gap-x-0.5 text-[#d4d4d8]">
+          <!-- JS stars populated on open -->
+        </div>
+      </div>
+
+      <!-- Note -->
+      <div class="mb-5">
+        <div class="section-title mb-1.5">Quick memory (optional)</div>
+        <textarea id="review-note" rows="2" placeholder="Loved the oat latte and quiet back table..." 
+                  class="w-full border border-[#e4e4e7] rounded-2xl p-3 text-[14.5px] focus:border-[#7c3aed] resize-y outline-none bg-white"></textarea>
+      </div>
+
+      <!-- Tags -->
+      <div class="mb-6">
+        <div class="section-title mb-2">Tags that fit</div>
+        <div id="review-tags" class="flex flex-wrap gap-1.5">
+          <!-- JS chips -->
+        </div>
+      </div>
+
+      <!-- Save -->
+      <button onclick="saveReview()" 
+              class="w-full h-12 bg-[#7c3aed] hover:bg-[#6d28d9] active:bg-[#5b21b6] text-white font-semibold rounded-2xl text-[15px] shadow-sm active:scale-[0.985] transition">
+        Save memory
+      </button>
+      <div class="text-center text-[10px] text-[#71717a] mt-2 tracking-wide">Instantly updates map &amp; list</div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-[4000] pointer-events-none"></div>
+
+  <script>
+    // Tailwind script (kept for parity)
+    function initializeTailwind() {}
+
+    // Realistic Gumi cafe data (same as approved mocks)
+    let cafes = [
+      { id: "c1", name: "Bean Story", address: "Gumi-si, near the river", lat: 36.1195, lng: 128.3447, tags: ["WiFi", "Quiet", "Power"], avgRating: 4.6 },
+      { id: "c2", name: "라떼하우스", address: "Indong-dong, Gumi", lat: 36.1123, lng: 128.3512, tags: ["Dessert", "Cozy", "WiFi"], avgRating: 4.2 },
+      { id: "c3", name: "구미 커피 로스터스", address: "Industrial complex area", lat: 36.1251, lng: 128.3389, tags: ["Power", "Work-friendly", "Great Coffee"], avgRating: 4.8 },
+      { id: "c4", name: "Quiet Corner Cafe", address: "Near Gumi Station", lat: 36.1089, lng: 128.3621, tags: ["Quiet", "View", "Cozy"], avgRating: 3.9 },
+      { id: "c5", name: "오트밀 & 라떼", address: "Seonsan-myeon", lat: 36.1344, lng: 128.3298, tags: ["Dessert", "WiFi", "Great Coffee"], avgRating: 4.5 },
+      { id: "c6", name: "The Daily Bean", address: "Gumi City Hall area", lat: 36.1158, lng: 128.3476, tags: ["Power", "Work-friendly", "Quiet"], avgRating: 4.1 },
+      { id: "c7", name: "카페 포레스트", address: "Near the park", lat: 36.1228, lng: 128.3554, tags: ["View", "Cozy", "Dessert"], avgRating: 4.7 },
+      { id: "c8", name: "Morning Roastery", address: "Wonpyeong-dong", lat: 36.1052, lng: 128.3411, tags: ["Great Coffee", "Power", "WiFi"], avgRating: 4.3 },
+      { id: "c9", name: "Hidden Table", address: "Residential street", lat: 36.1301, lng: 128.3629, tags: ["Quiet", "Cozy"], avgRating: 4.0 },
+      { id: "c10", name: "Gumi Sky Cafe", address: "High floor with view", lat: 36.1180, lng: 128.3490, tags: ["View", "Dessert", "Cozy"], avgRating: 4.9 }
+    ];
+
+    // User reviews (persisted only in this mock session)
+    let userReviews = {
+      "c1": { rating: 5, note: "Best quiet spot for deep work. Excellent flat white.", tags: ["Quiet", "Power", "WiFi"] },
+      "c3": { rating: 5, note: "Amazing single origin pour-over. Will return.", tags: ["Great Coffee", "Power"] },
+      "c7": { rating: 4, note: "Beautiful view of the mountains. Great for dates.", tags: ["View", "Cozy"] }
+    };
+
+    let map;
+    let markers = {};
+    let selectedCafeId = null;
+    let currentFilters = { search: "", minRating: 0, tags: [] };
+    let currentReviewCafeId = null;
+    let currentStarRating = 4;
+    let isMobile = false;
+
+    const ALL_TAGS = ["WiFi", "Quiet", "Power", "Dessert", "View", "Work-friendly", "Great Coffee", "Cozy"];
+
+    // Sheet state
+    let currentSheetMode = 'peek'; // 'peek' | 'med' | 'full'
+    let isDraggingSheet = false;
+    let dragStartY = 0;
+    let dragStartHeight = 0;
+
+    const SHEET_PEEK = 128;
+    let SHEET_MED = 380;
+    let SHEET_FULL = 560;
+
+    function checkMobile() {
+      isMobile = window.innerWidth < 768;
+      // Adjust snap points slightly for screen
+      const vh = window.innerHeight;
+      SHEET_MED = Math.max(320, Math.round(vh * 0.42));
+      SHEET_FULL = Math.min(620, Math.round(vh * 0.78));
+    }
+
+    function initMap() {
+      map = L.map('map', { 
+        zoomControl: true,
+        attributionControl: false 
+      }).setView([36.1195, 128.3447], 13.8);
+      
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        className: 'map-tiles'
+      }).addTo(map);
+
+      // Add markers
+      cafes.forEach(cafe => {
+        const rating = userReviews[cafe.id] ? userReviews[cafe.id].rating : cafe.avgRating;
+        const color = getRatingColor(rating);
+        
+        const icon = L.divIcon({
+          className: '',
+          html: `<div class="cafe-marker" data-id="${cafe.id}" style="background:${color}; font-size:11px;">${rating.toFixed(1)}</div>`,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+          popupAnchor: [0, -20]
+        });
+
+        const marker = L.marker([cafe.lat, cafe.lng], { icon }).addTo(map);
+        
+        marker.on('click', () => {
+          selectCafe(cafe.id);
+          openReviewSheet(cafe.id);
+        });
+        
+        markers[cafe.id] = marker;
+      });
+
+      // Initial beautiful fit
+      map.fitBounds(cafes.map(c => [c.lat, c.lng]), { padding: [40, 40], maxZoom: 15.2 });
+
+      // Position zoom control nicely (top right, above sheet peek)
+      map.zoomControl.setPosition('topright');
+    }
+
+    function getRatingColor(rating) {
+      if (rating >= 4.5) return '#7c3aed';
+      if (rating >= 4.0) return '#a78bfa';
+      if (rating >= 3.5) return '#6366f1';
+      return '#4b5563';
+    }
+
+    function updateMarkerIcon(cafeId, rating, isSelected = false) {
+      const marker = markers[cafeId];
+      if (!marker) return;
+      const color = getRatingColor(rating);
+      let html = `<div class="cafe-marker ${isSelected ? 'selected' : ''}" data-id="${cafeId}" style="background:${color}; font-size:11px;">${rating.toFixed(1)}</div>`;
+      
+      const newIcon = L.divIcon({
+        className: '',
+        html: html,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17]
+      });
+      marker.setIcon(newIcon);
+    }
+
+    // ========== SHEET DRAG + STATE ==========
+    function initSheetDrag() {
+      const sheet = document.getElementById('bottom-sheet');
+      const handle = document.getElementById('sheet-handle');
+
+      handle.addEventListener('pointerdown', (e) => {
+        isDraggingSheet = true;
+        dragStartY = e.clientY;
+        dragStartHeight = sheet.offsetHeight;
+        sheet.style.transition = 'none';
+        document.body.style.userSelect = 'none';
+      });
+
+      document.addEventListener('pointermove', (e) => {
+        if (!isDraggingSheet) return;
+        const delta = dragStartY - e.clientY; // positive when dragging up
+        let newHeight = dragStartHeight + delta;
+        
+        // Clamp
+        const minH = SHEET_PEEK - 10;
+        const maxH = SHEET_FULL + 40;
+        newHeight = Math.max(minH, Math.min(maxH, newHeight));
+        
+        sheet.style.height = `${newHeight}px`;
+      });
+
+      document.addEventListener('pointerup', () => {
+        if (!isDraggingSheet) return;
+        isDraggingSheet = false;
+        document.body.style.userSelect = '';
+        
+        const sheetEl = document.getElementById('bottom-sheet');
+        sheetEl.style.transition = 'height 320ms cubic-bezier(0.32, 0.72, 0, 1)';
+        
+        const currentH = sheetEl.offsetHeight;
+        const vh = window.innerHeight;
+        
+        // Snap points
+        const peek = SHEET_PEEK;
+        const med = SHEET_MED;
+        const full = SHEET_FULL;
+        
+        let targetH;
+        let newMode;
+        
+        const midPeekMed = (peek + med) / 2;
+        const midMedFull = (med + full) / 2;
+        
+        if (currentH < midPeekMed) {
+          targetH = peek;
+          newMode = 'peek';
+        } else if (currentH < midMedFull) {
+          targetH = med;
+          newMode = 'med';
+        } else {
+          targetH = full;
+          newMode = 'full';
+        }
+        
+        sheetEl.style.height = `${targetH}px`;
+        
+        // Small haptic on native devices
+        if (navigator.vibrate) navigator.vibrate(8);
+        
+        setSheetMode(newMode);
+      });
+
+      // Tap handle to toggle
+      handle.addEventListener('click', (e) => {
+        if (isDraggingSheet) return;
+        const current = document.getElementById('bottom-sheet').offsetHeight;
+        if (current <= SHEET_PEEK + 20) {
+          setSheetMode('med');
+        } else {
+          setSheetMode('peek');
+        }
+      });
+
+      // Also allow tapping the whole header area in peek to expand
+      const headerArea = document.querySelector('#bottom-sheet .sheet-header');
+      if (headerArea) {
+        headerArea.addEventListener('click', (e) => {
+          if (currentSheetMode === 'peek' && !e.target.closest('#reset-filters-btn')) {
+            setSheetMode('med');
+          }
+        });
+      }
+    }
+
+    function setSheetMode(mode) {
+      const sheet = document.getElementById('bottom-sheet');
+      const peek = document.getElementById('peek-summary');
+      const expanded = document.getElementById('expanded-content');
+      const label = document.getElementById('sheet-state-label');
+
+      currentSheetMode = mode;
+
+      if (mode === 'peek') {
+        sheet.style.height = `${SHEET_PEEK}px`;
+        peek.style.display = 'flex';
+        expanded.classList.add('hidden');
+        label.textContent = 'Pull up';
+      } else {
+        const targetH = (mode === 'med') ? SHEET_MED : SHEET_FULL;
+        sheet.style.height = `${targetH}px`;
+        peek.style.display = 'none';
+        expanded.classList.remove('hidden');
+        label.textContent = (mode === 'full') ? 'Pull down' : 'Minimize';
+        
+        // Ensure filters + lists are rendered when first entering expanded
+        if (!expanded.dataset.initialized) {
+          renderSheetFilters();
+          // Seed the vertical list (and peek) using current filter state (usually all)
+          const searchInput = document.getElementById('sheet-search-input');
+          if (searchInput) {
+            // applyFilters will populate both peek + vertical correctly
+            applyFilters();
+          } else {
+            renderPeekSummary(cafes);
+            renderVerticalList(cafes);
+          }
+          expanded.dataset.initialized = 'true';
+        }
+      }
+    }
+
+    function toggleSheet() {
+      if (currentSheetMode === 'peek') {
+        setSheetMode('med');
+      } else {
+        setSheetMode('peek');
+      }
+    }
+
+    // ========== FILTERS (inside sheet) ==========
+    function renderSheetFilters() {
+      renderSheetRatingFilters();
+      renderSheetTagFilters();
+    }
+
+    function renderSheetRatingFilters() {
+      const container = document.getElementById('sheet-rating-filters');
+      if (!container) return;
+      container.innerHTML = '';
+      
+      [0, 3.5, 4.0, 4.5].forEach(rating => {
+        const btn = document.createElement('button');
+        const active = currentFilters.minRating === rating;
+        btn.className = `compact-chip rounded-2xl border transition font-medium ${active ? 'bg-[#7c3aed] text-white border-[#7c3aed]' : 'border-[#e4e4e7] bg-white hover:bg-[#f4f4f5] text-[#3f3f46]'}`;
+        btn.textContent = rating === 0 ? 'Any' : `${rating}+`;
+        btn.onclick = () => {
+          currentFilters.minRating = rating;
+          applyFilters();
+          renderSheetRatingFilters();
+        };
+        container.appendChild(btn);
+      });
+    }
+
+    function renderSheetTagFilters() {
+      const container = document.getElementById('sheet-tag-filters');
+      if (!container) return;
+      container.innerHTML = '';
+      
+      ALL_TAGS.forEach(tag => {
+        const btn = document.createElement('button');
+        const active = currentFilters.tags.includes(tag);
+        btn.className = `tag-chip px-3 py-1 text-xs rounded-2xl whitespace-nowrap flex-shrink-0 ${active ? 'active' : ''}`;
+        btn.textContent = tag;
+        
+        btn.onclick = () => {
+          if (currentFilters.tags.includes(tag)) {
+            currentFilters.tags = currentFilters.tags.filter(t => t !== tag);
+          } else {
+            currentFilters.tags.push(tag);
+          }
+          applyFilters();
+          renderSheetTagFilters();
+        };
+        container.appendChild(btn);
+      });
+    }
+
+    function applyFilters() {
+      const searchInput = document.getElementById('sheet-search-input');
+      const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
+      currentFilters.search = searchTerm;
+
+      const filtered = cafes.filter(cafe => {
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+        
+        const matchesSearch = !searchTerm || 
+          cafe.name.toLowerCase().includes(searchTerm) || 
+          (review && review.note && review.note.toLowerCase().includes(searchTerm));
+        
+        const matchesRating = rating >= currentFilters.minRating;
+        
+        const cafeTags = review ? review.tags : cafe.tags;
+        const matchesTags = currentFilters.tags.length === 0 || 
+          currentFilters.tags.some(t => cafeTags.includes(t));
+        
+        return matchesSearch && matchesRating && matchesTags;
+      });
+
+      // Update count
+      const countEl = document.getElementById('sheet-count');
+      countEl.textContent = filtered.length;
+
+      // Show/hide reset
+      const resetBtn = document.getElementById('reset-filters-btn');
+      const hasFilters = currentFilters.search || currentFilters.minRating > 0 || currentFilters.tags.length > 0;
+      if (resetBtn) resetBtn.classList.toggle('hidden', !hasFilters);
+
+      // Re-render peek + vertical
+      renderPeekSummary(filtered);
+      renderVerticalList(filtered);
+
+      // Update map markers (dim + recolor)
+      updateMapMarkers(filtered);
+    }
+
+    function resetFilters() {
+      currentFilters = { search: "", minRating: 0, tags: [] };
+      
+      const searchInput = document.getElementById('sheet-search-input');
+      if (searchInput) searchInput.value = '';
+      
+      const countEl = document.getElementById('sheet-count');
+      countEl.textContent = cafes.length;
+      
+      document.getElementById('reset-filters-btn').classList.add('hidden');
+      
+      renderPeekSummary(cafes);
+      renderVerticalList(cafes);
+      updateMapMarkers(cafes);
+      
+      // Reset UI chips
+      renderSheetRatingFilters();
+      renderSheetTagFilters();
+    }
+
+    function updateMapMarkers(filteredCafes) {
+      // First dim all
+      Object.values(markers).forEach(m => {
+        const el = m.getElement ? m.getElement() : null;
+        if (el) el.style.opacity = '0.18';
+      });
+      
+      filteredCafes.forEach(cafe => {
+        const marker = markers[cafe.id];
+        if (!marker) return;
+        
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+        
+        // Restore opacity + possibly update icon if rating changed
+        const el = marker.getElement ? marker.getElement() : null;
+        if (el) el.style.opacity = '1';
+        
+        // Keep icon fresh
+        updateMarkerIcon(cafe.id, rating, cafe.id === selectedCafeId);
+      });
+    }
+
+    // ========== RENDER LISTS ==========
+    function renderPeekSummary(filteredCafes) {
+      const container = document.getElementById('peek-summary');
+      container.innerHTML = '';
+      
+      if (filteredCafes.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'text-xs text-[#71717a] py-1 px-2';
+        empty.textContent = 'No cafés match your filters';
+        container.appendChild(empty);
+        return;
+      }
+      
+      const toShow = filteredCafes.slice(0, 5);
+      toShow.forEach(cafe => {
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+        
+        const pill = document.createElement('div');
+        pill.className = 'peek-pill';
+        pill.innerHTML = `
+          <span class="font-medium text-[#111113]">${cafe.name}</span>
+          <span class="font-semibold tabular-nums text-[#7c3aed]">${rating.toFixed(1)}</span>
+        `;
+        pill.onclick = (e) => {
+          e.stopImmediatePropagation();
+          openReviewSheet(cafe.id);
+        };
+        container.appendChild(pill);
+      });
+      
+      if (filteredCafes.length > 5) {
+        const more = document.createElement('div');
+        more.className = 'text-[11px] text-[#71717a] self-center px-2 font-medium';
+        more.textContent = `+${filteredCafes.length - 5}`;
+        container.appendChild(more);
+      }
+    }
+
+    function renderVerticalList(filteredCafes) {
+      const container = document.getElementById('sheet-vertical-list');
+      container.innerHTML = '';
+      
+      if (filteredCafes.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'text-center py-6 text-sm text-[#71717a]';
+        empty.innerHTML = `No matches.<br><span class="text-xs">Try clearing filters above.</span>`;
+        container.appendChild(empty);
+        return;
+      }
+      
+      filteredCafes.forEach(cafe => {
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+        const isReviewed = !!review;
+        
+        const card = document.createElement('div');
+        card.className = `sheet-cafe-card flex justify-between items-start gap-3 ${selectedCafeId === cafe.id ? 'selected' : ''}`;
+        
+        const tagsHTML = (review ? review.tags : cafe.tags).slice(0, 3).map(tag => 
+          `<span class="tag-chip px-2 py-px text-[10px] rounded-xl">${tag}</span>`
+        ).join('');
+        
+        card.innerHTML = `
+          <div class="flex-1 min-w-0">
+            <div class="flex items-baseline gap-x-2">
+              <div class="font-semibold text-[14.5px] tracking-[-0.15px]">${cafe.name}</div>
+              <div class="font-semibold text-sm tabular-nums text-[#7c3aed]">${rating.toFixed(1)}</div>
+            </div>
+            <div class="text-xs text-[#52525b] truncate mt-px">${cafe.address}</div>
+            <div class="flex gap-1 mt-1.5 flex-wrap">${tagsHTML}</div>
+          </div>
+          ${isReviewed ? `<div class="text-[10px] px-1.5 py-0.5 self-start rounded bg-[#f1f0f5] text-[#7c3aed] font-medium whitespace-nowrap mt-0.5">Yours</div>` : ''}
+        `;
+        
+        card.onclick = () => {
+          openReviewSheet(cafe.id);
+        };
+        
+        container.appendChild(card);
+      });
+    }
+
+    function updateSheetCountAndLists() {
+      // Called after data changes (e.g. after save)
+      const hasFilters = currentFilters.search || currentFilters.minRating > 0 || currentFilters.tags.length > 0;
+      let filtered;
+      
+      if (hasFilters) {
+        // Recompute with current filters (search input may be stale but ok)
+        const searchTerm = document.getElementById('sheet-search-input')?.value.toLowerCase().trim() || '';
+        filtered = cafes.filter(cafe => {
+          const review = userReviews[cafe.id];
+          const rating = review ? review.rating : cafe.avgRating;
+          const matchesSearch = !searchTerm || cafe.name.toLowerCase().includes(searchTerm) || (review?.note || '').toLowerCase().includes(searchTerm);
+          const matchesRating = rating >= currentFilters.minRating;
+          const cafeTags = review ? review.tags : cafe.tags;
+          const matchesTags = currentFilters.tags.length === 0 || currentFilters.tags.some(t => cafeTags.includes(t));
+          return matchesSearch && matchesRating && matchesTags;
+        });
+      } else {
+        filtered = [...cafes];
+      }
+      
+      const countEl = document.getElementById('sheet-count');
+      countEl.textContent = filtered.length;
+      
+      renderPeekSummary(filtered);
+      renderVerticalList(filtered);
+    }
+
+    // ========== MAP + SELECTION ==========
+    function selectCafe(cafeId) {
+      selectedCafeId = cafeId;
+      const cafe = cafes.find(c => c.id === cafeId);
+      if (!cafe) return;
+      
+      // Fly map to it
+      map.flyTo([cafe.lat, cafe.lng], 16.5, { duration: 0.65, easeLinearity: 0.2 });
+      
+      // Update marker visual
+      const rating = userReviews[cafeId] ? userReviews[cafeId].rating : cafe.avgRating;
+      updateMarkerIcon(cafeId, rating, true);
+      
+      // Deselect previous other markers after short delay
+      setTimeout(() => {
+        Object.keys(markers).forEach(id => {
+          if (id !== cafeId) {
+            const r = userReviews[id] ? userReviews[id].rating : cafes.find(c => c.id === id).avgRating;
+            updateMarkerIcon(id, r, false);
+          }
+        });
+      }, 420);
+    }
+
+    function updateMapMarkersForAll() {
+      // Used after global data change
+      cafes.forEach(cafe => {
+        const rating = userReviews[cafe.id] ? userReviews[cafe.id].rating : cafe.avgRating;
+        const isSel = cafe.id === selectedCafeId;
+        updateMarkerIcon(cafe.id, rating, isSel);
+      });
+    }
+
+    // ========== REVIEW SHEET ==========
+    function openReviewSheet(cafeId) {
+      currentReviewCafeId = cafeId;
+      const cafe = cafes.find(c => c.id === cafeId);
+      const existing = userReviews[cafeId] || {};
+      
+      // Populate header
+      document.getElementById('review-cafe-name').textContent = cafe.name;
+      document.getElementById('review-cafe-address').textContent = cafe.address;
+      
+      // Prefill rating (default 4 if new)
+      currentStarRating = existing.rating || 4;
+      
+      // Render stars
+      renderReviewStars();
+      
+      // Note
+      document.getElementById('review-note').value = existing.note || '';
+      
+      // Tags
+      renderReviewTags(cafe, existing.tags || []);
+      
+      // Show the sheet
+      const reviewSheet = document.getElementById('review-sheet');
+      reviewSheet.classList.add('open');
+      
+      // Auto-collapse list sheet to peek so map stays visible
+      if (currentSheetMode !== 'peek') {
+        setSheetMode('peek');
+      }
+      
+      // Also select/highlight on map
+      selectCafe(cafeId);
+    }
+    
+    function renderReviewStars() {
+      const container = document.getElementById('review-star-rating');
+      container.innerHTML = '';
+      
+      for (let i = 1; i <= 5; i++) {
+        const star = document.createElement('span');
+        star.className = `star review-star ${i <= currentStarRating ? 'filled' : ''}`;
+        star.textContent = '★';
+        star.onclick = () => {
+          currentStarRating = i;
+          renderReviewStars();
+        };
+        container.appendChild(star);
+      }
+    }
+    
+    function renderReviewTags(cafe, currentSelected) {
+      const container = document.getElementById('review-tags');
+      container.innerHTML = '';
+      
+      // Combine cafe tags + all for good coverage
+      const tagPool = [...new Set([...cafe.tags, ...ALL_TAGS])].slice(0, 9);
+      
+      tagPool.forEach(tag => {
+        const isActive = currentSelected.includes(tag);
+        const chip = document.createElement('button');
+        chip.className = `tag-chip px-3.5 py-1.5 text-sm rounded-2xl ${isActive ? 'active' : ''}`;
+        chip.textContent = tag;
+        
+        chip.onclick = () => {
+          let newSel = [...currentSelected];
+          if (newSel.includes(tag)) {
+            newSel = newSel.filter(t => t !== tag);
+          } else {
+            newSel.push(tag);
+          }
+          renderReviewTags(cafe, newSel);
+        };
+        container.appendChild(chip);
+      });
+    }
+    
+    function saveReview() {
+      if (!currentReviewCafeId) return;
+      
+      const note = document.getElementById('review-note').value.trim();
+      
+      // Collect active tags from DOM
+      const tagChips = document.getElementById('review-tags').querySelectorAll('.tag-chip');
+      let tags = [];
+      tagChips.forEach(chip => {
+        if (chip.classList.contains('active')) tags.push(chip.textContent);
+      });
+      
+      // Save
+      userReviews[currentReviewCafeId] = {
+        rating: currentStarRating,
+        note: note || undefined,
+        tags: tags
+      };
+      
+      // Close review sheet
+      closeReviewSheet();
+      
+      // Refresh everything
+      applyFilters();                    // updates count, peek, vertical, map markers via filter
+      updateMapMarkersForAll();          // ensure all icons correct
+      
+      const cafe = cafes.find(c => c.id === currentReviewCafeId);
+      
+      // Toast
+      showToast(`Saved for ${cafe.name} ★${currentStarRating}`);
+      
+      // Keep selection on map
+      setTimeout(() => {
+        if (selectedCafeId === currentReviewCafeId) {
+          updateMarkerIcon(currentReviewCafeId, currentStarRating, true);
+        }
+      }, 120);
+    }
+    
+    function closeReviewSheet() {
+      const reviewSheet = document.getElementById('review-sheet');
+      reviewSheet.classList.remove('open');
+      // Small delay before clearing id
+      setTimeout(() => {
+        if (!reviewSheet.classList.contains('open')) currentReviewCafeId = null;
+      }, 320);
+    }
+
+    // ========== UTILITIES ==========
+    function showToast(message) {
+      const container = document.getElementById('toast-container');
+      container.innerHTML = '';
+      
+      const toast = document.createElement('div');
+      toast.className = 'toast bg-white border border-[#e4e4e7] shadow-xl rounded-2xl px-5 py-2.5 flex items-center gap-x-2 text-sm font-medium pointer-events-auto';
+      toast.innerHTML = `
+        <span class="text-[#7c3aed]">✓</span>
+        <span>${message}</span>
+      `;
+      
+      container.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.transition = 'all 200ms ease';
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 160);
+      }, 1850);
+    }
+
+    function exportReviews() {
+      const data = {
+        exportedAt: new Date().toISOString(),
+        totalCafes: cafes.length,
+        reviews: userReviews,
+        cafes: cafes
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'gumi-cafe-reviews-v6.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      showToast('Reviews exported (JSON)');
+    }
+
+    function centerOnAllCafes() {
+      map.flyTo([36.1195, 128.3447], 13.6, { duration: 0.8 });
+      showToast('Map recentered');
+    }
+
+    function simulateLocateMe() {
+      // Fake user location near one of the cafes
+      const fakeLat = 36.1172;
+      const fakeLng = 128.3488;
+      map.flyTo([fakeLat, fakeLng], 15.2, { duration: 0.7 });
+      
+      // Brief pulsing dot simulation
+      const pulse = L.divIcon({
+        className: '',
+        html: `<div style="width:18px;height:18px;background:#7c3aed;border-radius:999px;opacity:0.25;border:3px solid #7c3aed;animation:pulse 1.6s ease-out infinite;"></div>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      });
+      const userMarker = L.marker([fakeLat, fakeLng], { icon: pulse, interactive: false }).addTo(map);
+      
+      setTimeout(() => {
+        map.removeLayer(userMarker);
+      }, 2400);
+      
+      showToast('Located (demo)');
+    }
+
+    // Add a tiny pulse keyframe via style injection
+    function injectPulseStyle() {
+      const style = document.createElement('style');
+      style.textContent = `
+        @keyframes pulse {
+          0% { transform: scale(0.6); opacity: 0.35; }
+          70% { transform: scale(1.35); opacity: 0.1; }
+          100% { transform: scale(1.6); opacity: 0; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    function initializeFiltersAndLists() {
+      // Initial render with all cafés
+      const countEl = document.getElementById('sheet-count');
+      countEl.textContent = cafes.length;
+      
+      renderPeekSummary(cafes);
+      // Vertical list and filters only rendered when expanded for first time (lazy)
+      
+      // Seed one rating filter chip in peek? No — only in expanded
+      document.getElementById('reset-filters-btn').classList.add('hidden');
+    }
+
+    function initializeEverything() {
+      checkMobile();
+      injectPulseStyle();
+      
+      initMap();
+      
+      initializeFiltersAndLists();
+      
+      initSheetDrag();
+      
+      // Start in peek state (map dominant)
+      const sheet = document.getElementById('bottom-sheet');
+      sheet.style.height = `${SHEET_PEEK}px`;
+      document.getElementById('peek-summary').style.display = 'flex';
+      document.getElementById('expanded-content').classList.add('hidden');
+      
+      // Initial marker icons with user reviews applied
+      updateMapMarkersForAll();
+      
+      // Optional: open in med state on very tall screens (commented, start peek)
+      // if (window.innerHeight > 820) setTimeout(() => setSheetMode('med'), 800);
+      
+      // Keyboard hint (dev)
+      console.log('%c[v6] Gumi Cafe Map bottom-sheet mock ready. Drag the handle or tap markers.', 'color:#7c3aed');
+      
+      // Demo tip after 4s (non-intrusive)
+      setTimeout(() => {
+        const hint = document.querySelector('.map-hint');
+        if (hint && window.innerWidth > 700) {
+          hint.style.transition = 'opacity 400ms';
+          // already visible
+        }
+      }, 4200);
+    }
+
+    function showFeedbackPrompt() {
+      const msg = 'Thank you! In a real review flow this would open a short feedback form or Linear issue.';
+      const toast = document.createElement('div');
+      toast.className = 'fixed bottom-5 left-1/2 -translate-x-1/2 bg-[#111113] text-white px-5 py-3 rounded-2xl text-sm shadow-2xl z-[5000]';
+      toast.textContent = msg;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.style.transition = 'all 220ms';
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 200);
+      }, 2400);
+    }
+
+    // Boot
+    window.onload = function() {
+      initializeEverything();
+    };
+
+    // Bonus: allow ESC to close review sheet
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        const review = document.getElementById('review-sheet');
+        if (review.classList.contains('open')) {
+          closeReviewSheet();
+        } else if (currentSheetMode !== 'peek') {
+          setSheetMode('peek');
+        }
+      }
+    });
+  </script>
+</body>
+</html>

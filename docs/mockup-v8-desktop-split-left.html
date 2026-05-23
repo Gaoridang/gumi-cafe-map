@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gumi Cafe Map — v8 Desktop Power (Split Left)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+
+    :root {
+      --bg: #f8f8f9;
+      --card: #ffffff;
+      --text: #111113;
+      --muted: #52525b;
+      --accent: #7c3aed;
+      --border: #e4e4e7;
+    }
+
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .heading { font-family: 'Space Grotesk', 'Inter', sans-serif; }
+
+    .map-container { border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.08); }
+
+    .cafe-card { transition: all 160ms cubic-bezier(0.2, 0, 0, 1); }
+    .cafe-card:hover { transform: translateY(-1px); }
+    .cafe-card.selected { 
+      border-color: #7c3aed; 
+      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15); 
+      background: #f8f7ff;
+    }
+
+    .filter-section {
+      background: #ffffff;
+      border: 1px solid #e4e4e7;
+      border-radius: 16px;
+    }
+
+    .result-row {
+      transition: all 140ms ease;
+    }
+    .result-row:hover {
+      background-color: #f8f8f9;
+    }
+    .result-row.selected {
+      background-color: #f0e6ff;
+      border-left: 3px solid #7c3aed;
+    }
+
+    .tag-chip {
+      transition: all 120ms ease;
+      font-size: 12px;
+      padding: 7px 12px;
+      border-radius: 10px;
+      border: 1px solid #e4e4e7;
+      background: #ffffff;
+      color: #3f3f46;
+      text-align: left;
+      width: 100%;
+    }
+    .tag-chip.active {
+      background-color: #7c3aed;
+      color: white;
+      border-color: #7c3aed;
+    }
+    .tag-chip:hover {
+      background: #f8f8f9;
+    }
+
+    .star { cursor: pointer; transition: transform 100ms ease; }
+    .star:hover { transform: scale(1.2); }
+    .star.filled { color: #7c3aed; }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: #71717a;
+      text-transform: uppercase;
+    }
+
+    .left-split {
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      gap: 0;
+      height: 100%;
+    }
+
+    .sidebar-panel {
+      border-right: 1px solid #e4e4e7;
+    }
+
+    .results-panel {
+      overflow-y: auto;
+    }
+
+    .map-wrapper {
+      position: relative;
+    }
+
+    .right-panel {
+      box-shadow: -4px 0 12px -2px rgb(0 0 0 / 0.06);
+    }
+  </style>
+</head>
+<body class="bg-[#f8f8f9] text-[#111113]">
+  <!-- Top bar -->
+  <div class="bg-white border-b border-[#e4e4e7] px-6 py-3 flex items-center justify-between text-sm">
+    <div class="flex items-center gap-x-3">
+      <div class="flex items-center gap-x-2">
+        <div class="w-8 h-8 bg-[#7c3aed] rounded-2xl flex items-center justify-center text-white text-lg font-bold">☕</div>
+        <div>
+          <span class="font-semibold text-lg tracking-tight">Gumi Cafe Map</span>
+          <span class="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-[#f0e6ff] text-[#7c3aed] font-medium">v8 POWER</span>
+        </div>
+      </div>
+      <div class="text-[#52525b]">12 cafés • <span class="font-medium text-[#7c3aed]">8 reviewed</span></div>
+    </div>
+
+    <div class="flex items-center gap-x-3">
+      <button onclick="exportReviews()" 
+              class="px-4 py-1.5 rounded-xl border border-[#e4e4e7] hover:bg-[#f8f8f9] text-sm font-medium transition">
+        Export JSON
+      </button>
+      <button onclick="showFeedbackPrompt()" 
+              class="px-4 py-1.5 rounded-xl bg-[#7c3aed] text-white text-sm font-semibold hover:bg-[#6d28d9] transition">
+        👍 Approve v8
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Desktop Layout -->
+  <div class="flex h-[calc(100vh-57px)]">
+
+    <!-- LEFT SPLIT PANEL (Bigger + Split into two) -->
+    <div class="w-[440px] flex border-r border-[#e4e4e7] bg-white">
+      
+      <!-- Part 1: Filters -->
+      <div class="w-[190px] border-r border-[#e4e4e7] p-4 flex flex-col">
+        <div class="section-label mb-2">Filters</div>
+
+        <!-- Search -->
+        <input id="search-input" type="text" placeholder="Search cafés..." 
+               onkeyup="applyFilters()"
+               class="w-full bg-[#f8f8f9] border border-[#e4e4e7] focus:border-[#7c3aed] rounded-2xl px-3 py-2 text-sm mb-4">
+
+        <!-- Rating -->
+        <div class="mb-4">
+          <div class="section-label mb-1.5">Min Rating</div>
+          <div class="flex flex-wrap gap-1.5" id="rating-filters">
+            <!-- JS populated -->
+          </div>
+        </div>
+
+        <!-- Tags -->
+        <div class="flex-1 overflow-y-auto">
+          <div class="section-label mb-1.5">Tags</div>
+          <div class="flex flex-col gap-1 px-1" id="tag-filters">
+            <!-- JS populated as full-width clean badges -->
+          </div>
+        </div>
+
+        <button onclick="resetFilters()" 
+                class="mt-3 text-xs py-2 rounded-xl border border-[#e4e4e7] hover:bg-[#f8f8f9] text-[#52525b]">
+          Clear all filters
+        </button>
+      </div>
+
+      <!-- Part 2: Results List -->
+      <div class="flex-1 flex flex-col">
+        <div class="px-4 py-3 border-b border-[#e4e4e7] flex items-center justify-between">
+          <div class="font-semibold text-sm">Results <span id="results-count" class="font-mono text-[#7c3aed]">12</span></div>
+        </div>
+
+        <div id="results-list" class="flex-1 overflow-y-auto p-2 space-y-1 text-sm">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- MAP -->
+    <div class="flex-1 relative">
+      <div id="map" class="w-full h-full"></div>
+      
+      <!-- Subtle map hint -->
+      <div class="absolute bottom-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-2xl text-xs text-[#52525b] shadow-sm border border-[#e4e4e7]">
+        Tap markers to select
+      </div>
+    </div>
+
+    <!-- RIGHT INSPECTOR / REVIEW PANEL -->
+    <div class="w-[380px] border-l border-[#e4e4e7] bg-white p-5 flex flex-col right-panel">
+      <div id="inspector-content">
+        <!-- Populated by JS when a cafe is selected -->
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Tailwind
+    function initTailwind() {
+      // Already using CDN
+    }
+
+    // Data
+    let cafes = [
+      { id: "c1", name: "Bean Story", address: "Near Gumi River", lat: 36.1195, lng: 128.3447, tags: ["WiFi", "Quiet", "Power"], avgRating: 4.6 },
+      { id: "c2", name: "라떼하우스", address: "Indong-dong", lat: 36.1123, lng: 128.3512, tags: ["Dessert", "Cozy"], avgRating: 4.2 },
+      { id: "c3", name: "Gumi Roasters", address: "Industrial area", lat: 36.1251, lng: 128.3389, tags: ["Power", "Work-friendly"], avgRating: 4.8 },
+      { id: "c4", name: "Quiet Corner", address: "Near Station", lat: 36.1089, lng: 128.3621, tags: ["Quiet", "View"], avgRating: 3.9 },
+      { id: "c5", name: "Oat & Latte", address: "Seonsan", lat: 36.1344, lng: 128.3298, tags: ["Dessert", "WiFi"], avgRating: 4.5 },
+      { id: "c6", name: "The Daily Bean", address: "City Hall area", lat: 36.1158, lng: 128.3476, tags: ["Power", "Work-friendly"], avgRating: 4.1 },
+      { id: "c7", name: "Forest Cafe", address: "Near park", lat: 36.1228, lng: 128.3554, tags: ["View", "Cozy"], avgRating: 4.7 },
+      { id: "c8", name: "Morning Roastery", address: "Wonpyeong", lat: 36.1052, lng: 128.3411, tags: ["Great Coffee"], avgRating: 4.3 },
+      { id: "c9", name: "Hidden Table", address: "Residential", lat: 36.1301, lng: 128.3629, tags: ["Quiet", "Cozy"], avgRating: 4.0 },
+      { id: "c10", name: "Sky Cafe Gumi", address: "High floor", lat: 36.1180, lng: 128.3490, tags: ["View", "Dessert"], avgRating: 4.9 }
+    ];
+
+    let userReviews = {
+      "c1": { rating: 5, note: "Best quiet spot for deep work.", tags: ["Quiet", "Power"] },
+      "c3": { rating: 5, note: "Amazing single origin.", tags: ["Great Coffee"] },
+      "c7": { rating: 4, note: "Beautiful view.", tags: ["View", "Cozy"] }
+    };
+
+    let map;
+    let markers = {};
+    let selectedCafeId = null;
+    let currentFilters = { search: "", minRating: 0, tags: [] };
+
+    const ALL_TAGS = ["WiFi", "Quiet", "Power", "Dessert", "View", "Work-friendly", "Great Coffee", "Cozy"];
+
+    function initMap() {
+      map = L.map('map', { zoomControl: false }).setView([36.1195, 128.3447], 14);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+      }).addTo(map);
+
+      cafes.forEach(cafe => {
+        const rating = userReviews[cafe.id] ? userReviews[cafe.id].rating : cafe.avgRating;
+        const color = getRatingColor(rating);
+
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="background:${color}; width:32px; height:32px; border-radius:9999px; display:flex; align-items:center; justify-content:center; color:white; font-size:11px; font-weight:700; border:2px solid white; box-shadow:0 2px 6px rgba(0,0,0,0.2);">${rating.toFixed(1)}</div>`,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
+        });
+
+        const marker = L.marker([cafe.lat, cafe.lng], { icon }).addTo(map);
+        marker.on('click', () => selectCafe(cafe.id));
+        markers[cafe.id] = marker;
+      });
+
+      map.fitBounds(cafes.map(c => [c.lat, c.lng]), { padding: [40, 40] });
+    }
+
+    function getRatingColor(rating) {
+      if (rating >= 4.5) return '#7c3aed';
+      if (rating >= 4.0) return '#a78bfa';
+      if (rating >= 3.5) return '#6366f1';
+      return '#4b5563';
+    }
+
+    function applyFilters() {
+      const search = document.getElementById('search-input').value.toLowerCase();
+      currentFilters.search = search;
+
+      const filtered = cafes.filter(cafe => {
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+
+        const matchesSearch = !search || cafe.name.toLowerCase().includes(search) || 
+                             (review?.note && review.note.toLowerCase().includes(search));
+        const matchesRating = rating >= currentFilters.minRating;
+
+        const cafeTags = review ? review.tags : cafe.tags;
+        const matchesTags = currentFilters.tags.length === 0 || 
+                           currentFilters.tags.some(t => cafeTags.includes(t));
+
+        return matchesSearch && matchesRating && matchesTags;
+      });
+
+      renderResultsList(filtered);
+      updateMapMarkers(filtered);
+    }
+
+    function renderResultsList(filteredCafes) {
+      const container = document.getElementById('results-list');
+      container.innerHTML = '';
+
+      document.getElementById('results-count').textContent = filteredCafes.length;
+
+      filteredCafes.forEach(cafe => {
+        const review = userReviews[cafe.id];
+        const rating = review ? review.rating : cafe.avgRating;
+
+        const div = document.createElement('div');
+        div.className = `result-row px-4 py-3 border-b border-[#f1f1f3] cursor-pointer ${selectedCafeId === cafe.id ? 'selected' : ''}`;
+
+        div.innerHTML = `
+          <div class="flex justify-between items-start">
+            <div>
+              <div class="font-medium">${cafe.name}</div>
+              <div class="text-xs text-[#71717a]">${cafe.address}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-semibold" style="color:#7c3aed">${rating}</div>
+            </div>
+          </div>
+        `;
+
+        div.onclick = () => selectCafe(cafe.id);
+        container.appendChild(div);
+      });
+    }
+
+    function renderFilterControls() {
+      // Rating
+      const ratingContainer = document.getElementById('rating-filters');
+      ratingContainer.innerHTML = '';
+
+      [0, 3.5, 4.0, 4.5].forEach(r => {
+        const btn = document.createElement('button');
+        btn.className = `px-3 py-1 text-xs rounded-2xl border transition font-medium ${currentFilters.minRating === r ? 'bg-[#7c3aed] text-white border-[#7c3aed]' : 'border-[#e4e4e7] hover:bg-[#f1f0f5] text-[#52525b]'}`;
+        btn.textContent = r === 0 ? 'Any' : `${r}+`;
+        btn.onclick = () => {
+          currentFilters.minRating = r;
+          applyFilters();
+          renderFilterControls();
+        };
+        ratingContainer.appendChild(btn);
+      });
+
+      // Tags
+      const tagContainer = document.getElementById('tag-filters');
+      tagContainer.innerHTML = '';
+
+      ALL_TAGS.forEach(tag => {
+        const isActive = currentFilters.tags.includes(tag);
+        const btn = document.createElement('button');
+        btn.className = `tag-chip ${isActive ? 'active' : ''}`;
+        btn.textContent = tag;
+        btn.onclick = () => {
+          if (currentFilters.tags.includes(tag)) {
+            currentFilters.tags = currentFilters.tags.filter(t => t !== tag);
+          } else {
+            currentFilters.tags.push(tag);
+          }
+          applyFilters();
+          renderFilterControls();
+        };
+        tagContainer.appendChild(btn);
+      });
+    }
+
+    function updateMapMarkers(filtered) {
+      Object.values(markers).forEach(m => m.setOpacity(0.2));
+
+      filtered.forEach(cafe => {
+        if (markers[cafe.id]) {
+          markers[cafe.id].setOpacity(1);
+        }
+      });
+    }
+
+    function selectCafe(cafeId) {
+      selectedCafeId = cafeId;
+      const cafe = cafes.find(c => c.id === cafeId);
+      if (!cafe) return;
+
+      // Fly map
+      if (map && markers[cafeId]) {
+        map.flyTo([cafe.lat, cafe.lng], 16, { duration: 0.6 });
+      }
+
+      // Update results list
+      applyFilters();
+
+      // Show in right panel
+      showCafeInInspector(cafeId);
+    }
+
+    function showCafeInInspector(cafeId) {
+      const container = document.getElementById('inspector-content');
+      const cafe = cafes.find(c => c.id === cafeId);
+      const review = userReviews[cafeId] || { rating: 0, note: '', tags: [] };
+
+      let html = `
+        <div>
+          <div class="font-semibold text-xl">${cafe.name}</div>
+          <div class="text-sm text-[#52525b]">${cafe.address}</div>
+
+          <div class="my-4">
+            <div class="text-xs text-[#71717a] mb-1">Current rating</div>
+            <div class="flex items-center gap-x-2">
+              <div class="text-3xl font-semibold" style="color:#7c3aed">${review.rating || cafe.avgRating}</div>
+              <div class="text-sm text-[#71717a]">/ 5</div>
+            </div>
+          </div>
+
+          <!-- Review Form -->
+          <div class="mt-6">
+            <div class="font-semibold mb-2">Your review</div>
+            
+            <div class="mb-4">
+              <div class="text-xs mb-1.5 text-[#52525b]">Rating</div>
+              <div id="inspector-stars" class="flex gap-x-1 text-3xl">
+                ${[1,2,3,4,5].map(i => `<span class="star cursor-pointer ${i <= (review.rating || 0) ? 'filled' : ''}" data-value="${i}">★</span>`).join('')}
+              </div>
+            </div>
+
+            <div class="mb-4">
+              <div class="text-xs mb-1.5 text-[#52525b]">Note</div>
+              <textarea id="inspector-note" class="w-full border border-[#e4e4e7] rounded-2xl p-3 text-sm" rows="3" placeholder="Loved the oat latte...">${review.note || ''}</textarea>
+            </div>
+
+            <div class="mb-4">
+              <div class="text-xs mb-1.5 text-[#52525b]">Tags</div>
+              <div id="inspector-tags" class="flex flex-wrap gap-1"></div>
+            </div>
+
+            <button onclick="saveInspectorReview('${cafeId}')" 
+                    class="w-full py-3 bg-[#7c3aed] hover:bg-[#6d28d9] text-white rounded-2xl font-semibold">
+              ${review.rating ? 'Update memory' : 'Save memory'}
+            </button>
+          </div>
+        </div>
+      `;
+
+      container.innerHTML = html;
+
+      // Attach star listeners
+      const stars = document.querySelectorAll('#inspector-stars .star');
+      stars.forEach(star => {
+        star.onclick = () => {
+          const val = parseInt(star.dataset.value);
+          stars.forEach(s => s.classList.remove('filled'));
+          stars.forEach(s => {
+            if (parseInt(s.dataset.value) <= val) s.classList.add('filled');
+          });
+          // store temporarily
+          star.parentElement.dataset.currentRating = val;
+        };
+      });
+
+      // Tags
+      renderInspectorTags(cafeId, review.tags || []);
+    }
+
+    function renderInspectorTags(cafeId, selectedTags) {
+      const container = document.getElementById('inspector-tags');
+      if (!container) return;
+      container.innerHTML = '';
+
+      const cafe = cafes.find(c => c.id === cafeId);
+      const all = [...new Set([...cafe.tags, ...ALL_TAGS])].slice(0, 8);
+
+      all.forEach(tag => {
+        const isActive = selectedTags.includes(tag);
+        const btn = document.createElement('button');
+        btn.className = `tag-chip px-3 py-1 text-xs border rounded-2xl ${isActive ? 'active' : ''}`;
+        btn.textContent = tag;
+        btn.onclick = () => {
+          let newTags = [...selectedTags];
+          if (newTags.includes(tag)) newTags = newTags.filter(t => t !== tag);
+          else newTags.push(tag);
+          renderInspectorTags(cafeId, newTags);
+        };
+        container.appendChild(btn);
+      });
+    }
+
+    function saveInspectorReview(cafeId) {
+      const note = document.getElementById('inspector-note')?.value.trim() || '';
+      const starsContainer = document.getElementById('inspector-stars');
+      const rating = parseInt(starsContainer?.dataset.currentRating) || userReviews[cafeId]?.rating || 4;
+
+      const tagButtons = document.querySelectorAll('#inspector-tags .tag-chip.active');
+      const tags = Array.from(tagButtons).map(b => b.textContent);
+
+      userReviews[cafeId] = { rating, note, tags };
+
+      // Refresh
+      applyFilters();
+      showCafeInInspector(cafeId);
+
+      const toast = document.createElement('div');
+      toast.className = `fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#111113] text-white px-5 py-2 rounded-3xl text-sm`;
+      toast.textContent = 'Memory saved';
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 1400);
+    }
+
+    function resetFilters() {
+      currentFilters = { search: "", minRating: 0, tags: [] };
+      document.getElementById('search-input').value = '';
+      applyFilters();
+      renderFilterControls();
+    }
+
+    function applyFiltersAndRender() {
+      applyFilters();
+    }
+
+    function updateMapMarkersForAll() {
+      // Simple refresh
+      if (map) {
+        Object.keys(markers).forEach(id => {
+          const cafe = cafes.find(c => c.id === id);
+          if (cafe) {
+            const review = userReviews[id];
+            const rating = review ? review.rating : cafe.avgRating;
+            // Could update icon here if needed
+          }
+        });
+      }
+    }
+
+    function exportReviews() {
+      const data = { exportedAt: new Date().toISOString(), reviews: userReviews, cafes };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gumi-cafe-memories-v8.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function showFeedbackPrompt() {
+      alert("Thanks! Feedback noted. We can refine v8 further.");
+    }
+
+    function init() {
+      initMap();
+      renderFilterControls();
+
+      // Initial render of results
+      const searchInput = document.getElementById('search-input');
+      searchInput.oninput = applyFilters;
+
+      // Initial data
+      applyFilters();
+
+      // Select first cafe by default for demo
+      setTimeout(() => {
+        if (cafes.length > 0) {
+          selectCafe(cafes[0].id);
+        }
+      }, 600);
+
+      console.log('%c[Gumi Cafe Map v8] Desktop Split Left layout ready', 'color:#7c3aed');
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>

@@ -1,73 +1,57 @@
-# React + TypeScript + Vite
+# Gumi Cafe Map
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A simple, calm, UX-first React + TypeScript web app for viewing and privately reviewing cafes in Gumi (구미), South Korea.
 
-Currently, two official plugins are available:
+**UX priority #1.** The entire experience is designed so you can open the map, spot a cafe, and log a 5-star review with optional note + tags in under 10 seconds — then see it reflected instantly on both the map and list.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Key Features (v1)
+- Interactive Leaflet map + synchronized list view (click either, both update)
+- Fast inline review form (stars, textarea, multi-select tags)
+- Live filters (search, min rating, tags, only-reviewed)
+- Private persistence via localStorage + one-click JSON export/import
+- Warm, restrained cafe-inspired design tokens (8pt rhythm, generous space)
+- Mobile-first (bottom sheet on phone, split view on desktop)
+- 100% client-side, zero backend, your data stays yours
 
-## React Compiler
+## Getting Started
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open http://localhost:5173 — seed data is included so you can immediately explore and add real reviews.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Dedicated Design Subagents (the reason this app feels good)
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+This project ships with its own `.grok/personas/` and `.grok/roles/` containing four original, purpose-built design agents:
+
+- `ux-explorer` — research (tech choices, competitor UX, a11y, map patterns)
+- `ux-designer` persona → produces reviewed `docs/UX-Spec.md`
+- `ui-designer` persona → produces `docs/UI-Spec.md` + `src/design/DesignTokens.ts`
+- `design-reviewer` persona → loops until **0 open issues** of any severity
+
+**Before any UI or map change you (or future Grok sessions) must run the full design loop using these local agents until the reviewer reports 0 open issues.**
+
+See `AGENTS.md` for the exact mandatory workflow and the "always use git worktree for clean branch" rule.
+
+The design artifacts live in `docs/` (UX-Spec.md, UI-Spec.md, DesignTokens, research notes).
+
+## Tech Stack
+- Vite + React 18 + TypeScript (strict)
+- Tailwind 3 + custom calm cafe palette + 8pt rhythm
+- Leaflet + react-leaflet (light, free, great React integration)
+- lucide-react icons
+- localStorage + JSON for reviews
+
+## Project Rules
+- Read `AGENTS.md` (it is loaded automatically)
+- All visual decisions go through the local design subagents first
+- Keep v1 tiny and fast
+
+## License
+Personal project — your reviews, your data.
+
+---
+
+Built with Grok + dedicated UX/UI design subagents for maximum calm and speed.
