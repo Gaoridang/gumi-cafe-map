@@ -1,8 +1,8 @@
 /**
- * Design Tokens for Gumi Cafe Map — authoritative (from ui-designer)
- * 8pt rhythm + warm cafe neutrals. Use these everywhere.
+ * Design Tokens for Gumi Cafe Map — authoritative (from ui-designer, v8+)
+ * Clean light neutral palette (ElevenLabs-inspired day mode) with purple accent.
+ * No warm café tones. 8pt rhythm. Use these everywhere (JS + Tailwind alignment).
  */
-
 export const spacing = {
   xs: '0.25rem',
   sm: '0.5rem',
@@ -21,25 +21,26 @@ export const radii = {
 } as const;
 
 export const colors = {
-  // Monotone calm neutral (updated per feedback)
+  // Clean neutral light (ElevenLabs-inspired)
   neutral: {
-    50: '#f5f4f1',
-    100: '#f0efea',
-    200: '#e3e1d9',
-    300: '#d4d1c7',
-    500: '#5f5b54',
-    700: '#3f3d38',
-    900: '#242422',
+    50: '#f8f8f9',
+    100: '#f4f4f5',
+    200: '#e4e4e7',
+    300: '#d4d4d8',
+    500: '#3f3f46',
+    700: '#27272a',
+    900: '#111113',
   },
-  accent: '#5f5b54',
-  white: '#fff',
-  border: '#e3e1d9',
-  success: '#4a5c4f',
+  accent: '#7c3aed',        // Signature purple
+  accentLight: '#a78bfa',
+  white: '#ffffff',
+  border: '#e4e4e7',
+  success: '#4a7c59',       // subtle green for saved states
 } as const;
 
 export const type = {
-  sans: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  sans: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
 } as const;
 
-export const shadow = '0 4px 12px -2px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.05)';
-export const transition = 'all 180ms cubic-bezier(0.2, 0, 0, 1)';
+export const shadow = '0 4px 12px -2px rgb(0 0 0 / 0.06), 0 2px 4px -2px rgb(0 0 0 / 0.04)';
+export const transition = 'all 160ms cubic-bezier(0.2, 0, 0, 1)';
