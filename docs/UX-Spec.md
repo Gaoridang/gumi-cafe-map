@@ -30,12 +30,15 @@ A busy Gumi local (20s–40s) who visits 2–3 cafes per week for work, meetings
 
 ### Desktop (≥1024px) — Power Layout (v8)
 - **Left area (~440px wide)**, split into two vertical columns:
-  - Filters column (~190px): Search, Min Rating pills, full-width selectable Tags
-  - Results column (flex): Scrollable list of cafés with live filtering
+  - Filters column (~190px): Search, Min Rating pills, full-width selectable Tags (own constrained scroll if content grows)
+  - Results column: wrapper uses `flex flex-col h-full min-h-0`; non-growing header ("Results • N", subtle border-b for separation) always pinned/visible above the list; dedicated inner `<div class="flex-1 overflow-y-auto ...">` holds *only* the café cards (space-y-2 or .cafe-card list). The count header never scrolls away.
 - **Center**: Large, dominant interactive map (Leaflet)
 - **Right Inspector panel (~380px)**: When a café is selected, shows details + the full ReviewForm inline (stars, note, tags, save) — no overlay needed on desktop
 - Bidirectional sync: Selecting from results or map highlights the other and populates the right inspector
 - Filters are persistent and scoped to the left filters column
+- **Main grid + pane constraints**: Use `lg:h-[calc(100dvh-4rem)]` (or `100svh`) + `overflow-hidden` on the root grid for viewport-robust height (better than 100vh under browser chrome/zoom). Mandate `min-h-0` (plus `overflow-hidden` on the hosting flex/grid cell where needed) on the left `lg:flex-row` container and every scroller-hosting pane. This propagates height correctly so the inner `flex-1 overflow-y-auto` receives real remaining space via flexbox (standard antidote to `min-height:auto` default on flex items).
+
+The exact structure and classes follow the visual contract in `docs/mockup-v8-desktop-split-left.html:172-177` (Results `flex-1 flex flex-col` > border-b header > `flex-1 overflow-y-auto` scroller), which was the approved v8 direction but not fully ported to the React implementation. Reference that HTML as the binding layout spec for the Results area.
 
 ### Mobile / Tablet (<1024px)
 - Map remains the primary full-bleed surface
@@ -43,6 +46,21 @@ A busy Gumi local (20s–40s) who visits 2–3 cafes per week for work, meetings
 - Tapping a marker or list item opens a stacking review sheet over the list sheet
 - Filters are available inside the list sheet when expanded
 - Graceful collapse of the desktop split layout (left sidebars become drawers, right panel becomes sheet)
+
+**Implementation constraints for constrained-height panes**
+
+To achieve reliable inner scrolling in the flex/grid side panels (without body-level overflow, cut-off cards, or lost count header) — essential for desktop users to scan the full filtered results list at a glance:
+
+- Root grid (lg): `h-[calc(100dvh-4rem)] overflow-hidden` (or equiv. using `100svh` / `100dvh` for robustness vs. browser UI chrome).
+- Left flex container (`lg:flex-row`): `h-full min-h-0` (mandatory; grid cell also benefits from `min-h-0`).
+- Results wrapper: `flex flex-col h-full min-h-0`
+- Results header row: non-growing (static height, `border-b` optional for calm separation per mockup).
+- Inner results list: `flex-1 overflow-y-auto` (only cards live here).
+- Apply analogous `min-h-0` + `flex-col` / inner scroller to Filters pane if its content (tags) ever needs it.
+
+This is the precise pattern from the v8 mockup visual contract (`docs/mockup-v8-desktop-split-left.html:172-177`) and the standard solution for Tailwind flex scrolling panes. The `min-h-0` defeats the flex item's `min-height: auto` intrinsic-size lock that was causing the reported overflow.
+
+**Why this supports UX priority #1 ("Review more, think less")**: Users can now reliably scroll and scan any number of results (all 10 seed cafés or filtered subsets) on any viewport height while the "Results • N" count and filters remain visible and interactive. No friction, no cognitive load from broken layout, direct enabler of the fast discover → tap → review <10s flow on the flagship desktop split view. Keeps the experience peaceful and personal. No design tokens added; pure layout classes + existing .cafe-card.
 
 **Mermaid IA Diagram (v8 Desktop Power)**
 
@@ -85,7 +103,7 @@ URL-driven filters: `?q=latte&min=4&tags=quiet,wifi` (applied to both results li
 3. Select: 
    - Map: tap large, high-contrast marker → map stays, list scrolls/highlights matching card.
    - List: tap card → map flies smoothly to marker (or instant on reduced-motion), card highlights.
-4. Review sheet/panel opens automatically with cafe name prominent ("Remember [Name]?").
+4. Review sheet/panel opens automatically with café name as clean semantic title (prominent heading) + warm invitation ("Your memory" or "Capture your memory here").
 5. Log (3–5 actions):
    - Tap star (1–5) — immediate visual fill, no submit yet.
    - (opt) Type 1-line note or tap 2–3 tag chips.
@@ -134,7 +152,18 @@ sequenceDiagram
 - Desktop: persistent right or bottom panel (or modal-like but non-blocking side sheet)
 - Mobile: bottom sheet (min 44px drag handle, expands to ~70vh max, scroll internal if needed)
 
-**Header (always):** "Remember [Cafe Name]?"  (warm, personal, question form invites memory)
+**Header (always):** 
+The café name is presented **cleanly and prominently** as a semantic heading / title (e.g. `<h2>` or styled equivalent with proper heading semantics for a11y, screen readers, and document outline). A separate, warm, low-pressure invitation follows, such as "Your memory" or "Capture your memory here".
+
+Example (must read naturally for all seed names):
+- **퍼블릭커피로스터즈**
+  Your memory
+- **스타벅스 구미옥계점**
+  Capture your memory here
+
+**Rationale and requirements:** This keeps the place name as the respectful subject (no awkward embedding or mangling with English verbs/questions). The invitation is calm and personal, consistent with the app's "your memories" tone and the clean inspector header in the v8 mockup. It directly supports "review more, think less" by making the right panel feel like opening a treasured personal notebook page rather than answering a prompt.
+
+**Explicit requirement:** Microcopy (and its implementation in ReviewForm) must be tested/validated against the actual Korean and mixed-language seed café names in `src/data/cafes.ts` (e.g. '퍼블릭커피로스터즈', '스타벅스 구미옥계점', '이디야커피 구미옥계점', '투썸플레이스 구미산동점' and all others). The name must never be visually or semantically mangled. Proper heading semantics ensure screen readers announce the clean name first.
 
 **Fields — strict vertical order, no overwhelm:**
 
@@ -182,7 +211,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    Select[Select cafe<br/>map or list] --> Open[Open sheet/panel<br/>"Remember Café X?"]
+    Select[Select cafe<br/>map or list] --> Open[Open sheet/panel<br/>Café name (title) + "Your memory"]
     Open --> Stars[Tap stars<br/>(1-5, instant)]
     Stars --> Note[Optional: type note<br/>or skip]
     Note --> Tags[Optional: tap 2-3<br/>tag chips]
@@ -247,7 +276,7 @@ Rationale: Covers 90% of what locals note about Gumi cafes per patterns research
 
 - Exact visual treatment for map markers (L.divIcon: solid circle with rating number inside vs rounded square vs subtle pin + badge on reviewed? Color ramp details beyond tokens — e.g. how to show "has review" vs avg rating).
 - Post-save behavior of review sheet: auto-dismiss after 800ms toast, or stay open with "Add another note" affordance? (affects mobile context preservation).
-- Korean microcopy finalization: natural translations for headers ("Remember...?"), placeholders, tag labels, "Save memory" (저장하기? or more personal "기록하기").
+- Korean microcopy finalization: **addressed by this revision** — chosen microcopy is clean café name as semantic title + separate "Your memory" / "Capture your memory here" (robust and natural for all Korean/mixed names in `src/data/cafes.ts`; no mangling, proper heading semantics for a11y). Other elements (tag labels, save button copy, placeholders) still benefit from user/ui polish for full bilingual feel.
 - Icon set: confirm lucide-react choices for filter icons, export, close (or custom SVGs from public/icons.svg).
 - Whether to surface "last visited date" or simple "reviewed" badge on list/map in v1 (or keep ultra-minimal).
 - Dark mode / high-contrast system preference timing (v1 light-only per tokens, or add toggle?).
@@ -266,6 +295,8 @@ Follow AGENTS.md: each slice gets ui-designer treatment + design-reviewer 0-issu
 4. **Filters** — Search input (live), rating min slider/chips, tag multi-filter chips, "only reviewed" toggle. Live filtering of data passed to MapView + List. URL param read/write.
 5. **Persistence** — useLocalStorage hook or context for reviews (per-cafe map of {rating, note, tags, timestamp}), optimistic update on save, load on mount, seed merge, JSON export/import buttons. Wire into Map/List/Form.
 6. **Polish** — Full responsive (split vs toggle + bottom sheet behaviors), empty states, a11y audit & fixes (keyboard, live regions, reduced-motion), marker polish with reviewed state, toast system, perf pass, final seed data, keyboard shortcuts if natural.
+7. **Fix inspector header microcopy and semantics in ReviewForm + UX-Spec** — Revise header to present café name cleanly/prominently as title (semantic heading) + warm separate invitation ("Your memory" etc.); add explicit Korean name validation requirement against `src/data/cafes.ts`; update journey and diagram per UX-Spec.
+8. **Implement reliable results pane scrolling (flex structure + min-h-0 per mockup) in App.tsx layout** — Apply the documented `flex flex-col h-full min-h-0` wrapper + non-growing "Results • N" header (border-b) + dedicated inner `flex-1 overflow-y-auto` scroller (plus `min-h-0` + `overflow-hidden` on grid cell and left `lg:flex-row` container) to exactly match the v8 mockup visual contract (`docs/mockup-v8-desktop-split-left.html:172-177`) and enable frictionless list scanning on all heights.
 
 Each PR < 1 day design + code. Total v1 keeps app < ~800 LOC app code. After all, full design-reviewer loop closes.
 

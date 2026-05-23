@@ -129,7 +129,7 @@ export function ReviewForm({ cafeName, existingReview, onSave, onClose }: Review
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <div className="font-semibold text-lg">Remember {cafeName}?</div>
+        <div className="font-semibold text-lg" role="heading" aria-level="2">{cafeName}</div>
         <div className="flex items-center gap-2 text-xs text-neutral-500">
           {existingReview ? 'Edit your memory' : 'Capture this visit'}
           {existingReview && (
