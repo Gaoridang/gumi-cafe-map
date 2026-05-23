@@ -6,21 +6,24 @@ export default {
   ],
   theme: {
     extend: {
-      // Calm cafe-inspired palette (warm neutrals + high contrast accents)
+      // Clean light neutral palette (ElevenLabs-inspired v8 day mode) + purple accent.
+      // No warm café tones. Exact match to DesignTokens.ts / UI-Spec.md neutral + accent.
+      // 8pt rhythm preserved. Neutral scale overrides default for precise light theme.
       colors: {
-        cafe: {
-          50: '#f8f5f2',
-          100: '#f0e9e0',
-          200: '#e2d5c4',
-          300: '#d1bc9f',
-          400: '#b89a72',
-          500: '#a07f54',
-          600: '#8a6a47',
-          700: '#6f5339',
-          800: '#5c4633',
-          900: '#4d3c2d',
+        neutral: {
+          50: '#f8f8f9',
+          100: '#f4f4f5',
+          200: '#e4e4e7',
+          300: '#d4d4d8',
+          500: '#3f3f46',
+          700: '#27272a',
+          900: '#111113',
         },
-        accent: '#c17f4a', // warm coffee accent for ratings/stars
+        accent: '#7c3aed',
+        accentLight: '#a78bfa',
+        white: '#ffffff',
+        border: '#e4e4e7',
+        success: '#4a7c59',
       },
       spacing: {
         // 8pt rhythm for calm, consistent breathing room (inspired by HIG/Readly)
@@ -30,4 +33,3 @@ export default {
   },
   plugins: [],
 }
-
