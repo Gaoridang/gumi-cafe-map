@@ -1,148 +1,266 @@
-import React, { useEffect } from 'react';
-import L from 'leaflet';
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
+import React, { useEffect, useState } from 'react';
+import { Map, CustomOverlayMap, useMap } from 'react-kakao-maps-sdk';
 import type { Cafe, ReviewsMap } from '../types';
 import { GUMI_CENTER } from '../data/cafes';
 import { colors } from '../design/DesignTokens';
 
+// Kakao Maps global (loaded via script in index.html)
+declare global {
+  interface Window {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    kakao: any;
+  }
+}
+
 export interface MapViewProps {
   /** All cafés that should have markers rendered. Map never unmounts on filter changes. */
   cafes: Cafe[];
-  /** Per-café reviews (optional). Drives rating color + reviewed state on markers. */
+  /** Per-café reviews (optional). Used for hasReview tint + aria labels on markers for instant reviewed-state sync. */
   reviews?: ReviewsMap;
   /** Bidirectional selection */
   selectedId: string | null;
   /** Called on marker click / keyboard activation. Parent updates selection + inspector. */
   onSelect: (id: string) => void;
-  /** Optional subset for dimming (future filters). Omit or pass all for full opacity. */
+  /** Optional subset for hiding markers (future filters). */
   visibleIds?: string[];
   className?: string;
   style?: React.CSSProperties;
 }
 
-/** Derives marker background strictly from locked v8 DesignTokens (no magic hexes). */
-function getMarkerColor(rating: number | null | undefined): string {
-  if (!rating) return colors.neutral[500];      // unreviewed — dark neutral
-  if (rating >= 4.5) return colors.accent;       // #7c3aed — strongest memory
-  if (rating >= 4.0) return colors.accentLight;  // #a78bfa
-  if (rating >= 3.5) return colors.neutral[700]; // #27272a — calm mid
-  return colors.neutral[500];
-}
-
-export function createCafeMarkerIcon(
-  cafe: Cafe,
-  rating: number | null,
-  isSelected: boolean,
-  hasReview: boolean
-): L.DivIcon {
-  const bg = getMarkerColor(rating);
-  const display = rating ? rating.toFixed(1) : '●';
-
-  const html = `
-    <div
-      style="
-        background: ${bg};
-        width: 28px;
-        height: 28px;
-        border-radius: 9999px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #fff;
-        font-size: 10px;
-        font-weight: 700;
-        border: 2px solid #fff;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
-        line-height: 1;
-        transition: inherit;
-      "
-      aria-label="${cafe.name}, ${rating ? `${rating} stars` : 'unreviewed'}${hasReview ? ', reviewed' : ''}"
-      title="${cafe.name}"
-    >${display}</div>
-  `;
-
-  return L.divIcon({
-    className: `cafe-marker ${hasReview ? 'reviewed' : 'unreviewed'} ${isSelected ? 'selected' : ''}`,
-    html,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
-    popupAnchor: [0, -18],
-  });
-}
-
-/** Flies the map to the selected café when selection changes from outside (list/inspector).
- *  Respects prefers-reduced-motion exactly (per UX-Spec + persona). */
-function MapFlyToController({ selectedId, cafes }: { selectedId: string | null; cafes: Cafe[] }) {
+/**
+ * Controller that pans the Kakao map when selection changes from list/inspector.
+ * Respects prefers-reduced-motion.
+ */
+function KakaoMapController({ selectedId, cafes }: { selectedId: string | null; cafes: Cafe[] }) {
   const map = useMap();
 
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId || !map) return;
+
     const cafe = cafes.find((c) => c.id === selectedId);
     if (!cafe) return;
 
     const reduced =
       typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-    map.flyTo(
-      [cafe.lat, cafe.lng],
-      Math.max(map.getZoom() || GUMI_CENTER.zoom, 15),
-      {
-        duration: reduced ? 0 : 0.65,
-        easeLinearity: 0.25,
+    const latlng = new window.kakao.maps.LatLng(cafe.lat, cafe.lng);
+
+    // Center the map so the selected marker is exactly in the middle
+    if (reduced) {
+      map.setCenter(latlng);
+    } else {
+      map.panTo(latlng);
+    }
+
+    // Zoom in a bit when selecting a place so the marker feels prominent and centered
+    const currentLevel = map.getLevel();
+    const targetLevel = 15;
+
+    if (currentLevel > targetLevel) {
+      if (reduced) {
+        map.setLevel(targetLevel);
+      } else {
+        map.setLevel(targetLevel, {
+          animate: { duration: 300 },
+        });
       }
-    );
-  }, [selectedId, cafes]);
+    }
+  }, [selectedId, cafes, map]);
 
   return null;
 }
 
 function MapViewImpl({
   cafes,
-  reviews,
   selectedId,
   onSelect,
   visibleIds,
+  reviews,
   className,
   style,
 }: MapViewProps) {
+  const [mapReady, setMapReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const center = GUMI_CENTER;
+
+  // Ensure Kakao SDK finishes loading (script uses autoload=false)
+  useEffect(() => {
+    let attempts = 0;
+    const maxAttempts = 100; // ~8 seconds
+
+    const tryLoad = () => {
+      attempts += 1;
+
+      if (window.kakao?.maps) {
+        window.kakao.maps.load(() => {
+          setMapReady(true);
+          setLoadError(null);
+        });
+      } else if (attempts > maxAttempts) {
+        // Give up and show clear error
+        setLoadError(
+          'Failed to load Kakao Maps SDK (403 Forbidden). ' +
+          'This almost always means your API key domain settings are incorrect.'
+        );
+      } else {
+        setTimeout(tryLoad, 80);
+      }
+    };
+
+    tryLoad();
+  }, []);
+
+  // Filter markers for future visibleIds support (small data set — simple & safe)
+  const markersToShow = visibleIds
+    ? cafes.filter((c) => visibleIds.includes(c.id))
+    : cafes;
+
+  // Error state - show helpful message
+  if (loadError) {
+    return (
+      <div
+        className={className ?? 'h-full w-full'}
+        style={{
+          ...style,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px',
+          background: '#fef2f2',
+          color: '#991b1b',
+          fontSize: '13px',
+          textAlign: 'center',
+          lineHeight: 1.5,
+        }}
+      >
+        <div>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Kakao Map failed to load</div>
+          <div style={{ opacity: 0.9 }}>{loadError}</div>
+          <div style={{ marginTop: 12, fontSize: '12px', opacity: 0.75 }}>
+            Fix: Go to Kakao Developers Console → your app → 플랫폼 → 웹<br />
+            Add these domains exactly and wait 60 seconds:
+          </div>
+          <div style={{ marginTop: 6, fontFamily: 'monospace', fontSize: '11px', background: '#fee2e2', padding: '6px 10px', borderRadius: 6 }}>
+            http://localhost:5173<br />
+            http://localhost<br />
+            http://127.0.0.1:5173<br />
+            http://127.0.0.1
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!mapReady) {
+    return (
+      <div
+        className={className ?? 'h-full w-full'}
+        style={{
+          ...style,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#71717a',
+          fontSize: '13px',
+        }}
+      >
+        Loading Kakao Map…
+      </div>
+    );
+  }
 
   return (
     <div className={className ?? 'h-full w-full'} style={style}>
-      <MapContainer
-        center={[center.lat, center.lng]}
-        zoom={center.zoom}
-        style={{ height: '100%', width: '100%' }}
-        zoomControl={false}
-        attributionControl={true}
+      <Map
+        center={{ lat: center.lat, lng: center.lng }}
+        level={center.level}
+        style={{ width: '100%', height: '100%' }}
       >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        />
-        <MapFlyToController selectedId={selectedId} cafes={cafes} />
+        <KakaoMapController selectedId={selectedId} cafes={cafes} />
 
-        {cafes.map((cafe) => {
-          const review = reviews?.[cafe.id];
-          const rating = review?.rating ?? null;
-          const hasReview = !!review;
+        {markersToShow.map((cafe) => {
           const isSelected = cafe.id === selectedId;
-          const isVisible = !visibleIds || visibleIds.includes(cafe.id);
+          const hasReview = !!reviews?.[cafe.id];
 
+          // Common positioning so selected and unselected sit on the exact same spot
+          const commonProps = {
+            position: { lat: cafe.lat, lng: cafe.lng },
+            xAnchor: 0.5,
+            yAnchor: 0.5,
+          } as const;
+
+          if (isSelected) {
+            // Selected: slightly larger, purple accent with soft ring
+            return (
+              <CustomOverlayMap
+                key={cafe.id}
+                {...commonProps}
+                zIndex={100}
+              >
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${cafe.name} (selected)`}
+                  style={{
+                    transform: 'translate(-50%, -50%)',
+                    width: '28px',
+                    height: '28px',
+                    backgroundColor: colors.accent,
+                    border: '2.5px solid #ffffff',
+                    borderRadius: '9999px',
+                    boxShadow: '0 0 0 5px rgba(124, 58, 237, 0.25)',
+                    cursor: 'pointer',
+                    transition: 'all 120ms ease-out',
+                  }}
+                  onClick={() => onSelect(cafe.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelect(cafe.id);
+                    }
+                  }}
+                  title={cafe.name}
+                />
+              </CustomOverlayMap>
+            );
+          }
+
+          // Default (unselected): green tint if reviewed (instant sync on save), neutral otherwise
           return (
-            <Marker
+            <CustomOverlayMap
               key={cafe.id}
-              position={[cafe.lat, cafe.lng]}
-              icon={createCafeMarkerIcon(cafe, rating, isSelected, hasReview)}
-              opacity={isVisible ? 1 : 0.22}
-              eventHandlers={{
-                click: () => onSelect(cafe.id),
-              }}
-            />
+              {...commonProps}
+              zIndex={1}
+            >
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label={hasReview ? `${cafe.name} (reviewed)` : cafe.name}
+                style={{
+                  transform: 'translate(-50%, -50%)',
+                  width: '22px',
+                  height: '22px',
+                  backgroundColor: hasReview ? colors.success : colors.neutral[500],
+                  border: '2px solid #ffffff',
+                  borderRadius: '9999px',
+                  boxShadow: hasReview ? '0 0 0 2px rgba(74, 124, 89, 0.25)' : '0 0 0 2px rgba(63, 63, 70, 0.15)',
+                  cursor: 'pointer',
+                  transition: 'all 120ms ease-out',
+                }}
+                onClick={() => onSelect(cafe.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelect(cafe.id);
+                  }
+                }}
+                title={hasReview ? `${cafe.name} (reviewed)` : cafe.name}
+              />
+            </CustomOverlayMap>
           );
         })}
-      </MapContainer>
+      </Map>
     </div>
   );
 }
