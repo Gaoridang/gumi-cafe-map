@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Calm, simple base for Gumi Cafe Map — UX priority #1 */
+:root {
+  color-scheme: light;
+  --cafe-bg: #f8f5f2;
+  --cafe-card: #fff;
+  --cafe-text: #4d3c2d;
+  --cafe-muted: #6f5339;
+  --cafe-accent: #c17f4a;
+  --cafe-border: #e2d5c4;
+  --shadow: 0 4px 12px -2px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+}
+
+body {
+  @apply bg-cafe-50 text-cafe-900 font-sans antialiased;
+  margin: 0;
+}
+
+#root {
+  min-height: 100svh;
+}
+
+/* Simple, accessible map container */
+.leaflet-container {
+  background: #f1e9df;
+  z-index: 1;
+}
+
+/* Calm card and form styles (will be refined by UI designer subagent) */
+.cafe-card {
+  @apply bg-white rounded-xl shadow-sm border border-cafe-200 transition-all hover:shadow-md;
+}
+
+.review-form input, .review-form textarea {
+  @apply border border-cafe-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-cafe-500;
+}
+
+/* Star rating */
+.star {
+  @apply text-cafe-300 cursor-pointer transition-colors hover:text-cafe-accent;
+}
+.star.filled {
+  @apply text-cafe-accent;
+}
