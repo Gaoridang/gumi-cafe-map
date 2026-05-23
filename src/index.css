@@ -32,6 +32,31 @@ body {
   z-index: 1;
 }
 
+/* Calm, token-faithful map markers for v8 Desktop Split-Left (per design-reviewer Slice 1 review).
+   36px hit area, strong-but-peaceful selected ring using accent, high contrast. */
+.cafe-marker {
+  transition: transform 120ms cubic-bezier(0.2, 0, 0, 1),
+              box-shadow 120ms cubic-bezier(0.2, 0, 0, 1);
+  cursor: pointer;
+}
+.cafe-marker:hover:not(.selected) {
+  transform: scale(1.08);
+  box-shadow: 0 3px 8px rgb(0 0 0 / 0.15);
+}
+.cafe-marker.selected {
+  transform: scale(1.32);
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.28), 0 4px 10px rgb(0 0 0 / 0.18);
+}
+
+/* Calm attribution on light neutral bg (small, readable, non-intrusive) */
+.leaflet-control-attribution {
+  font-size: 9px;
+  color: #71717a; /* neutral-500 */
+  background: rgba(255, 255, 255, 0.85);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
 /* Calm card and form styles (v8 neutral palette, high contrast, 8pt-aligned) */
 .cafe-card {
   @apply bg-white rounded-xl shadow-sm border border-neutral-200 transition-all hover:shadow-md;
