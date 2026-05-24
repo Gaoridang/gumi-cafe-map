@@ -204,7 +204,9 @@ export function ReviewForm({ cafeName, existingReview, onSave, onClose }: Review
           disabled={!existingReview && !coffeeRating && !dessertRating && !moodRating}
           className="w-full py-3 rounded-2xl bg-accent text-white font-medium active:opacity-90 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {justSaved ? 'Saved ✓' : existingReview ? 'Update memory' : 'Save memory'}
+          {justSaved 
+            ? (existingReview ? 'Memory updated ✓' : 'Memory saved ✓') 
+            : (existingReview ? 'Update memory' : 'Save memory')}
         </button>
 
         <button

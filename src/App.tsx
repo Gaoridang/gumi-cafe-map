@@ -3,7 +3,7 @@ import './index.css'
 import { seedCafes } from './data/cafes'
 import { MapView } from './components/MapView'
 import { ReviewForm } from './components/ReviewForm'
-import type { FilterState, Review, ReviewsMap } from './types'
+import type { Cafe, FilterState, Review, ReviewsMap } from './types'
 import { TAG_VOCAB } from './types'
 
 function getAverageRating(review?: Review): number | null {
@@ -39,6 +39,39 @@ function App() {
 
   const [reviews, setReviews] = useState<ReviewsMap>({})
 
+  // Places (cafes) + ratings persisted to localStorage so everything survives refresh
+  const [cafes, _setCafes] = useState<Cafe[]>(() => {
+    try {
+      const saved = localStorage.getItem('gumi-cafe-places')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Extract base cafe data (strip any embedded review)
+          return parsed.map((item: any) => {
+            const { review, ...baseCafe } = item
+            return baseCafe
+          })
+        }
+      }
+    } catch {
+      console.warn('Failed to load places from localStorage, falling back to seed data')
+    }
+    return seedCafes
+  })
+
+  // Persist places + current ratings together
+  useEffect(() => {
+    try {
+      const enrichedPlaces = cafes.map(cafe => ({
+        ...cafe,
+        review: reviews[cafe.id] || undefined
+      }))
+      localStorage.setItem('gumi-cafe-places', JSON.stringify(enrichedPlaces))
+    } catch {
+      console.warn('Failed to save places (with ratings) to localStorage')
+    }
+  }, [cafes, reviews])
+
   // For calm export/import feedback (v1, no full toast system)
   const [persistStatus, setPersistStatus] = useState<string | null>(null)
 
@@ -46,13 +79,37 @@ function App() {
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('gumi-cafe-reviews')
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        Promise.resolve().then(() => setReviews(parsed))
+      // First try dedicated reviews key
+      let loadedReviews: ReviewsMap = {}
+      const reviewsSaved = localStorage.getItem('gumi-cafe-reviews')
+      if (reviewsSaved) {
+        const parsed = JSON.parse(reviewsSaved)
+        if (parsed && typeof parsed === 'object') {
+          loadedReviews = parsed
+        }
+      }
+
+      // Also load ratings embedded in places data (as fallback / "save ratings too")
+      const placesSaved = localStorage.getItem('gumi-cafe-places')
+      if (placesSaved) {
+        const parsedPlaces = JSON.parse(placesSaved)
+        if (Array.isArray(parsedPlaces)) {
+          parsedPlaces.forEach((item: any) => {
+            if (item?.id && item.review && typeof item.review === 'object') {
+              // Only use if not already loaded from dedicated key
+              if (!loadedReviews[item.id]) {
+                loadedReviews[item.id] = item.review
+              }
+            }
+          })
+        }
+      }
+
+      if (Object.keys(loadedReviews).length > 0) {
+        Promise.resolve().then(() => setReviews(loadedReviews))
       }
     } catch {
-      console.warn('Failed to load reviews from localStorage')
+      console.warn('Failed to load reviews/ratings from localStorage')
     }
   }, [])
 
@@ -84,9 +141,9 @@ function App() {
   }, [filters])
 
   const currentReview = selectedId ? reviews[selectedId] : undefined
-  const selectedCafe = selectedId ? seedCafes.find((c) => c.id === selectedId) : undefined
+  const selectedCafe = selectedId ? cafes.find((c) => c.id === selectedId) : undefined
 
-  const filteredCafes = seedCafes.filter((cafe) => {
+  const filteredCafes = cafes.filter((cafe) => {
     const matchesQuery =
       filters.query === '' ||
       cafe.name.toLowerCase().includes(filters.query.toLowerCase()) ||
@@ -106,7 +163,12 @@ function App() {
     return matchesQuery && matchesTags && matchesRating && matchesReviewed
   })
 
-  const visibleIds = filteredCafes.map((c) => c.id)
+  // Sort list in Korean character order (가나다순)
+  const displayCafes = [...filteredCafes].sort((a, b) =>
+    a.name.localeCompare(b.name, 'ko-KR')
+  )
+
+  const visibleIds = displayCafes.map((c) => c.id)
 
   // Guard: clear inspector if selected cafe is filtered out (e.g. raise minRating or toggle onlyReviewed)
   useEffect(() => {
@@ -114,6 +176,13 @@ function App() {
       Promise.resolve().then(() => setSelectedId(null))
     }
   }, [visibleIds, selectedId])
+
+  // Default select the first place in Korean character order when nothing is selected
+  useEffect(() => {
+    if (selectedId === null && displayCafes.length > 0) {
+      setSelectedId(displayCafes[0].id)
+    }
+  }, [displayCafes, selectedId])
 
   // Export: one-click JSON download of user's reviews (with metadata)
   const handleExport = () => {
@@ -198,7 +267,7 @@ function App() {
           <div className="w-8 h-8 rounded-xl bg-accent flex items-center justify-center text-white text-sm font-semibold">G</div>
           <div>
             <div className="font-semibold tracking-tight">Gumi Cafe Map</div>
-            <div className="text-[10px] text-neutral-500 -mt-0.5">My memories • {seedCafes.length} cafés</div>
+            <div className="text-[10px] text-neutral-500 -mt-0.5">My memories • {cafes.length} cafés</div>
           </div>
         </div>
 
@@ -333,11 +402,11 @@ function App() {
           <div className="flex-1 flex flex-col h-full min-h-0">
             {/* Pinned header (non-scrolling, per approved mockup contract) */}
             <div className="text-xs uppercase tracking-widest text-neutral-500 mb-2 px-1 py-1 border-b border-neutral-100 flex-shrink-0">
-              Results • {filteredCafes.length}
+              Results • {displayCafes.length}
             </div>
             {/* Dedicated scroller — only café cards live here */}
             <div className="flex-1 overflow-y-auto px-1 py-2 space-y-2">
-              {filteredCafes.map((cafe) => {
+              {displayCafes.map((cafe) => {
                 const review = reviews[cafe.id]
                 const avgRating = getAverageRating(review)
 
@@ -374,7 +443,7 @@ function App() {
                   </button>
                 )
               })}
-              {filteredCafes.length === 0 && (
+              {displayCafes.length === 0 && (
                 <div className="text-sm text-neutral-500 px-1">No matches — clear filters?</div>
               )}
             </div>
@@ -383,7 +452,7 @@ function App() {
 
         {/* Center: Live MapView — bidirectional with list + inspector */}
         <MapView
-          cafes={seedCafes}
+          cafes={cafes}
           selectedId={selectedId}
           onSelect={setSelectedId}
           visibleIds={visibleIds}
@@ -398,10 +467,23 @@ function App() {
               cafeName={selectedCafe.name}
               existingReview={currentReview}
               onSave={(review) => {
-                setReviews((prev) => ({
-                  ...prev,
+                const updatedReviews = {
+                  ...reviews,
                   [selectedId]: review,
-                }))
+                }
+                setReviews(updatedReviews)
+
+                // Explicitly save places + ratings right when user changes/saves a review
+                try {
+                  const enrichedPlaces = cafes.map(cafe => ({
+                    ...cafe,
+                    review: updatedReviews[cafe.id] || undefined
+                  }))
+                  localStorage.setItem('gumi-cafe-places', JSON.stringify(enrichedPlaces))
+                  localStorage.setItem('gumi-cafe-reviews', JSON.stringify(updatedReviews))
+                } catch {
+                  console.warn('Failed to save places with ratings on review change')
+                }
               }}
               onClose={() => setSelectedId(null)}
             />
