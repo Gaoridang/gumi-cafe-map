@@ -1,0 +1,9 @@
+# Vercel-specific ignore (in addition to .gitignore)
+# Keeps builds fast and clean
+.env
+.env.*
+node_modules
+.git
+dist
+*.log
+.DS_Store

@@ -22,6 +22,37 @@ npm run dev
 
 Open http://localhost:5173 — seed data is included so you can immediately explore and add real reviews.
 
+## Deploy to Vercel (Production)
+
+The app is a fully static, client-side React + Vite build — ideal for Vercel.
+
+### Prerequisites
+- A Vercel account (free tier is sufficient).
+- Kakao Developers JavaScript API key (same one used locally).
+- In the Kakao console, add your production domain(s) under **Platform → Web** (e.g. `https://your-app.vercel.app` and any custom domain). This is the most common production blocker.
+
+### Steps
+1. Push your code to GitHub (Vercel works great with GitHub).
+2. In Vercel, **Import Project** → select the repo.
+3. Vercel auto-detects Vite. No changes needed for framework.
+4. In **Project Settings → Environment Variables**, add:
+   - `VITE_KAKAO_MAP_KEY` (value = your key)
+   - Apply to **Production** and **Preview**.
+5. (Optional but recommended) Copy `.env.example` to `.env` locally for development.
+6. Deploy. Vercel will run `npm run build` and serve from `dist/`.
+
+The included `vercel.json` provides:
+- SPA fallback (query params for filters continue to work on refresh/share)
+- Security headers
+- Long-term caching for built assets
+
+### Post-Deploy
+- Test the map loads (Kakao domain whitelist is critical).
+- Filters, reviews, localStorage export/import, and desktop experience work immediately.
+- Known pre-production gap: mobile uses a basic responsive stack today. Full draggable bottom-sheet experience (per design specs) is the next focused slice.
+
+Your data stays 100% on the user's device. No backend required.
+
 ## Dedicated Design Subagents (the reason this app feels good)
 
 This project ships with its own `.grok/personas/` and `.grok/roles/` containing four original, purpose-built design agents:
