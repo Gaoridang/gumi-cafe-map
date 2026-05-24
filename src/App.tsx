@@ -235,11 +235,11 @@ function App() {
       </header>
 
       {/* v8 Desktop Power Layout (lg) — graceful stack on mobile with map first (order-1) then list (order-2) then inspector for map-primary UX per spec compromise */}
-      <div className="grid grid-cols-1 lg:grid-cols-[440px_1fr_380px] h-auto lg:h-[calc(100vh-4rem)] overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-[440px_1fr_380px] h-auto lg:h-[calc(100dvh-4rem)] overflow-hidden">
         {/* Left: Filters + Results — vertical on mobile, side-by-side on lg. order-2 so map (order-1) appears first on small screens for map-primary feel */}
-        <div className="flex h-auto lg:h-full border-r border-neutral-200 bg-white flex-col lg:flex-row order-2 lg:order-none">
+        <div className="flex h-auto lg:h-full min-h-0 border-r border-neutral-200 bg-white flex-col lg:flex-row order-2 lg:order-none">
           {/* Filters Column */}
-          <div className="w-full lg:w-48 border-b lg:border-b-0 lg:border-r border-neutral-200 flex-shrink-0 overflow-y-auto px-3 py-4 text-sm">
+          <div className="w-full lg:w-48 border-b lg:border-b-0 lg:border-r border-neutral-200 flex-shrink-0 min-h-0 overflow-y-auto px-3 py-4 text-sm">
             <div className="font-semibold mb-1 text-neutral-900">Search</div>
             <input
               type="text"
@@ -330,11 +330,13 @@ function App() {
           </div>
 
           {/* Results Column */}
-          <div className="flex-1 overflow-y-auto px-3 py-4">
-            <div className="text-xs uppercase tracking-widest text-neutral-500 mb-2 px-1">
+          <div className="flex-1 flex flex-col h-full min-h-0">
+            {/* Pinned header (non-scrolling, per approved mockup contract) */}
+            <div className="text-xs uppercase tracking-widest text-neutral-500 mb-2 px-1 py-1 border-b border-neutral-100 flex-shrink-0">
               Results • {filteredCafes.length}
             </div>
-            <div className="space-y-2">
+            {/* Dedicated scroller — only café cards live here */}
+            <div className="flex-1 overflow-y-auto px-1 py-2 space-y-2">
               {filteredCafes.map((cafe) => {
                 const review = reviews[cafe.id]
                 const avgRating = getAverageRating(review)
@@ -390,7 +392,7 @@ function App() {
         />
 
         {/* Right: Inspector — ReviewForm (stacks on mobile) */}
-        <div className="border-l border-neutral-200 bg-white overflow-y-auto p-5 text-sm h-auto lg:h-full order-3 lg:order-none">
+        <div className="border-l border-neutral-200 bg-white overflow-y-auto p-5 text-sm h-auto lg:h-full min-h-0 order-3 lg:order-none">
           {selectedId && selectedCafe ? (
             <ReviewForm
               cafeName={selectedCafe.name}
